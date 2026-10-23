@@ -102,3 +102,6 @@ The hosting stack contains the private S3 bucket and policy, CloudFront distribu
 The consolidated remaining-work checklist and current rollout status are in [TODO.md](TODO.md).
 
 See [the PRD and checklist](prd/aws-vercel-mvp.md) and [the deploy API guide](api/README.md). The milestone 1 helpers use the operator's local AWS identity and reject API deployment IDs. API clients use project bearer tokens and signed object URLs; `npm run verify:api` exercises the complete API flow with disposable projects.
+
+
+omg stable version
