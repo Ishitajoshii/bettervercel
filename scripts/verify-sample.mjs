@@ -37,10 +37,17 @@ run(async () => {
   }
   const asset = files.find(file => file.key.endsWith('.js'));
   assert(asset, 'Vite build must contain JavaScript to verify nested asset paths.');
-  const repeat = await http(config.url + asset.key);
-  assert(repeat.headers.get('x-cache')?.toLowerCase().includes('hit'),
-    'Repeat asset request was not a CloudFront cache hit; retry verification once propagation settles.');
-  await repeat.arrayBuffer();
+  let cacheHit = false;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const repeat = await http(config.url + asset.key);
+    assert(repeat.status === 200, `Repeat asset request returned ${repeat.status}.`);
+    cacheHit = repeat.headers.get('x-cache')?.toLowerCase().includes('hit') ?? false;
+    await repeat.arrayBuffer();
+    if (cacheHit) break;
+    // A fresh edge cache may still be filling when the first response completes.
+    if (attempt < 5) await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  assert(cacheHit, 'Repeated asset requests did not produce a CloudFront cache hit.');
   console.log('PASS: repeated asset request served from CloudFront cache.');
 
   const direct = await http(`https://${config.BucketName}.s3.${config.Region}.amazonaws.com/${config.prefix}index.html`);

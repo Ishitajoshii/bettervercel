@@ -73,7 +73,7 @@ Keep it out of a VPC. A VPC adds no value here, and NAT gateways are a common ac
 
 1. CLI or GitHub Actions runs the framework build and produces `dist`, `build`, or Next.js `out`.
 2. Client calls `POST /v1/deployments` with project ID, commit SHA, framework, artifact manifest, and idempotency key.
-3. Lambda verifies deploy token, creates an `uploading` record, and returns presigned S3 URLs scoped to `artifacts/<project>/<deployment>/`.
+3. Lambda verifies deploy token, creates an `uploading` record, and returns presigned S3 URLs scoped to `deployments/<project>/<deployment>/`.
 4. Client uploads files directly to private S3 and calls `POST /v1/deployments/<id>/finalize`.
 5. Lambda validates manifest/object list, atomically marks it `ready`, and returns the CloudFront preview URL.
 6. CloudFront serves the immutable prefix. SPA fallback applies only if the framework declares it.
@@ -121,13 +121,23 @@ Do not copy code until its license is reviewed. Start by reproducing lifecycle b
 
 ### Milestone 2 — deploy API
 
-- [ ] Create DynamoDB `Projects` and `Deployments` schema.
-- [ ] Create API Gateway HTTP API and Lambda control handler.
-- [ ] Implement project creation, deployment create/finalize, deployment get, and project deployment list endpoints.
-- [ ] Generate raw deploy token once; retain only salted hash.
-- [ ] Generate short-lived prefix-scoped presigned upload URLs.
-- [ ] Enforce 25 MB artifact limit, file-count/MIME limits, idempotency, and status transitions.
-- [ ] Test token validation, prefix isolation, manifests, and concurrent finalization.
+- [x] Create DynamoDB `Projects` and `Deployments` schema.
+- [x] Create API Gateway HTTP API and Lambda control handler.
+- [x] Implement project creation, deployment create/finalize, deployment get, and project deployment list endpoints.
+- [x] Generate raw deploy token once; retain only salted hash.
+- [x] Generate short-lived prefix-scoped presigned upload URLs.
+- [x] Enforce 25 MiB artifact limit, file-count/MIME limits, idempotency, and status transitions.
+- [x] Test token validation, prefix isolation, manifests, and concurrent finalization.
+
+Audit and live verification on October 23, 2026:
+
+- `npm run check` passed TypeScript checking, API bundling, and all 30 tests. Both hosting and control-stack synthesis succeeded. CloudFormation reports hosting `UPDATE_COMPLETE`, control plane `CREATE_COMPLETE`, and bootstrap `CREATE_COMPLETE`.
+- Milestone 1 was reverified against AWS: HTTPS/canonical redirects, exact HTML/JS/CSS and MIME, cache hits, S3 encryption/public-access blocks, and anonymous S3 denial. A fresh `audit-20261023-m1` preview was uploaded, verified, deleted, and invalidated; its URL returned 403 afterward. The original `milestone-1` preview remains available.
+- Fixed nested-directory redirects so relative assets resolve correctly. Added bounded retries to the fresh CDN cache-hit check. The updated CloudFront function also routes API deployments through their owning project prefix; the hosting update preserved the bucket, distribution, and budget.
+- Deployed `BetterVercelControlStack` in `ap-south-1`. The live API smoke test passed IAM-only project creation, separate project tokens, cross-project create/read/list/finalize denial, path and size validation, idempotent create/conflict, incomplete finalize, signed S3 uploads, checksum enforcement, overwrite denial, changed-prefix signature denial, concurrent finalize, status/list, and byte-for-byte preview delivery.
+- [Live API-created preview](https://d34mbpew2lb7ue.cloudfront.net/d/p98bba9981bb88a5e-5b2aefa02b022f413a1194297d2829a0/). It expires under the seven-day artifact lifecycle. API endpoint: `https://bubil63r3f.execute-api.ap-south-1.amazonaws.com`.
+- Browser click verification remains manual: both browser automation helpers failed at startup. All HTTP/content and API checks ran against real deployed resources.
+- See [API contracts, security boundaries, schema and teardown](../api/README.md). Public previews share an origin; known uploaded paths are accessible before finalization. SPA fallback, production aliases, deletion APIs, durable hosting retention, and the CLI remain later work.
 
 ### Milestone 3 — CLI
 

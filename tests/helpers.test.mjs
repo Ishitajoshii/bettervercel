@@ -7,6 +7,7 @@ test('destructive commands can only target a single validated deployment prefix'
   for (const id of [undefined, '', '/', '../', 'a/b', 'a*', 'A', '-a', 'a'.repeat(64)]) {
     assert.throws(() => deploymentPrefix(id), /--id/);
   }
+  assert.throws(() => deploymentPrefix(`p1111111111111111-${'a'.repeat(32)}`), /reserved/);
 });
 
 test('sets executable assets to the correct MIME type', () => {

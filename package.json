@@ -1,0 +1,48 @@
+{
+  "name": "bettervercel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "check": "tsc --noEmit && npm run build:api && node --test tests/*.test.mjs",
+    "test": "npm run build:api && node --test tests/*.test.mjs",
+    "build:api": "node scripts/build-api.mjs",
+    "synth:api": "node scripts/control-infra.mjs synth",
+    "diff:api": "node scripts/control-infra.mjs diff",
+    "deploy:api": "node scripts/control-infra.mjs deploy",
+    "verify:api": "node scripts/verify-api.mjs",
+    "create:project": "node scripts/create-project.mjs",
+    "destroy:api": "node scripts/control-infra.mjs destroy",
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy:infra": "cdk deploy --outputs-file cdk-outputs.json",
+    "build:sample": "vite build examples/vite-site",
+    "upload:sample": "node scripts/upload-sample.mjs",
+    "verify:sample": "node scripts/verify-sample.mjs",
+    "delete:sample": "node scripts/delete-sample.mjs",
+    "destroy:infra": "cdk destroy"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cloudfront": "^3.0.0",
+    "@aws-sdk/client-dynamodb": "^3.1156.0",
+    "@aws-sdk/client-s3": "3.1156.0",
+    "@aws-sdk/credential-providers": "^3.1156.0",
+    "@aws-sdk/lib-dynamodb": "^3.1156.0",
+    "@aws-sdk/s3-request-presigner": "^3.1156.0",
+    "@smithy/hash-node": "^4.5.2",
+    "@smithy/signature-v4": "^5.7.4",
+    "aws-cdk-lib": "2.274.0",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "aws-cdk": "2.1146.1",
+    "esbuild": "^0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "~5.9.3",
+    "vite": "8.3.5"
+  }
+}
