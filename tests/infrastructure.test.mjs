@@ -21,6 +21,7 @@ test('private bucket uses AES256, public access blocks, short artifact retention
     OwnershipControls: { Rules: [{ ObjectOwnership: 'BucketOwnerEnforced' }] },
     LifecycleConfiguration: { Rules: Match.arrayWith([Match.objectLike({
       ExpirationInDays: 7, Prefix: 'deployments/', Status: 'Enabled',
+      AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 },
     })]) },
     WebsiteConfiguration: Match.absent(),
   });
@@ -62,6 +63,25 @@ test('does not introduce always-on compute, KMS keys, bootstrap assets, or clean
     'AWS::CloudFront::ResponseHeadersPolicy',
   ]));
   assert.equal(JSON.stringify(template.toJSON()).includes('BootstrapVersion'), false);
+});
+
+test('release gate: CloudFront reads only public prefixes and cannot list or write the bucket', () => {
+  const bucketId = Object.keys(template.findResources('AWS::S3::Bucket'))[0];
+  const distributionId = Object.keys(template.findResources('AWS::CloudFront::Distribution'))[0];
+  const statements = Object.values(template.findResources('AWS::S3::BucketPolicy'))
+    .flatMap(policy => policy.Properties.PolicyDocument.Statement);
+  const allowed = statements.filter(statement => statement.Effect === 'Allow');
+  assert.equal(allowed.length, 1);
+  assert.deepEqual(allowed[0].Principal, { Service: 'cloudfront.amazonaws.com' });
+  assert.equal(allowed[0].Action, 's3:GetObject');
+  assert.deepEqual(allowed[0].Resource, ['deployments/*', 'dashboard/*'].map(path => ({
+    'Fn::Join': ['', [{ 'Fn::GetAtt': [bucketId, 'Arn'] }, '/' + path]],
+  })));
+  assert.deepEqual(allowed[0].Condition, { StringEquals: { 'AWS:SourceArn': {
+    'Fn::Join': ['', ['arn:', { Ref: 'AWS::Partition' }, ':cloudfront::', { Ref: 'AWS::AccountId' }, ':distribution/', { Ref: distributionId }]],
+  } } });
+  // A broad deny enforces TLS; it grants no additional read/write permissions.
+  assert.ok(statements.some(statement => statement.Effect === 'Deny' && statement.Condition?.Bool?.['aws:SecureTransport'] === 'false'));
 });
 
 test('optional budget alerts track pre-credit spending at $1, $3, and $5', () => {

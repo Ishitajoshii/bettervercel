@@ -87,6 +87,21 @@ export class StaticHostingStack extends Stack {
       functionAssociations: [{ function: router, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
     });
 
+    // Replace CDK's default bucket-wide OAC read grant with the public content prefixes.
+    // No list permission: missing objects must remain errors, not bucket listings.
+    // CDK's OAC helper has no prefix option (an empty access-level list also creates
+    // an invalid statement). Narrow the generated read statement via an L1 override,
+    // preserving its exact distribution condition, TLS deny, and construct IDs.
+    const bucketPolicy = bucket.policy!.node.defaultChild as s3.CfnBucketPolicy;
+    const policy = this.resolve(bucketPolicy.policyDocument);
+    policy.Statement.forEach((statement: { Effect: string; Action: string; Principal?: { Service?: string } }, index: number) => {
+      if (statement.Effect === 'Allow' && statement.Action === 's3:GetObject' &&
+          statement.Principal?.Service === 'cloudfront.amazonaws.com') {
+        bucketPolicy.addPropertyOverride(`PolicyDocument.Statement.${index}.Resource`,
+          [bucket.arnForObjects('deployments/*'), bucket.arnForObjects('dashboard/*')]);
+      }
+    });
+
     new CfnOutput(this, 'BucketName', { value: bucket.bucketName });
     new CfnOutput(this, 'DistributionId', { value: distribution.distributionId });
     new CfnOutput(this, 'DomainName', { value: distribution.distributionDomainName });

@@ -49,3 +49,47 @@ test('API can only access project artifact prefixes; deletion and invalidation a
   assert.deepEqual(list.Condition, { StringLike: { 's3:prefix': ['deployments/p*/*/'] } });
   for (const statement of statements) assert.notEqual(statement.Resource, '*');
 });
+
+test('release gate: every execution-role permission stays within its exact service and resource scope', () => {
+  const resources = template.toJSON().Resources;
+  const resourceId = (type, prefix) => Object.keys(resources).find(id => resources[id].Type === type && id.startsWith(prefix));
+  const arn = value => ({ 'Fn::Join': ['', ['arn:', { Ref: 'AWS::Partition' }, value]] });
+  const expected = {
+    'logs:CreateLogStream': { 'Fn::GetAtt': [resourceId('AWS::Logs::LogGroup', 'ControlLogs'), 'Arn'] },
+    'logs:PutLogEvents': { 'Fn::GetAtt': [resourceId('AWS::Logs::LogGroup', 'ControlLogs'), 'Arn'] },
+    's3:GetObject': arn(':s3:::test-artifacts/deployments/p*/*/*'),
+    's3:PutObject': arn(':s3:::test-artifacts/deployments/p*/*/*'),
+    's3:DeleteObject': arn(':s3:::test-artifacts/deployments/p*/*/*'),
+    's3:ListBucket': arn(':s3:::test-artifacts'),
+    'cloudfront:CreateInvalidation': arn(':cloudfront::123456789012:distribution/E123456789'),
+  };
+  const tablePermissions = new Map([
+    [resourceId('AWS::DynamoDB::Table', 'Projects'), ['dynamodb:GetItem', 'dynamodb:PutItem']],
+    [resourceId('AWS::DynamoDB::Table', 'Deployments'), ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query']],
+  ]);
+  const statements = Object.values(template.findResources('AWS::IAM::Policy')).flatMap(p => p.Properties.PolicyDocument.Statement);
+  for (const statement of statements.filter(s => s.Effect === 'Allow')) {
+    assert.equal(statement.NotAction, undefined);
+    assert.equal(statement.NotResource, undefined);
+    const actions = [statement.Action].flat();
+    if (actions.some(action => action.startsWith('dynamodb:'))) {
+      const table = statement.Resource['Fn::GetAtt']?.[0];
+      assert.ok(tablePermissions.has(table), 'Unexpected DynamoDB resource');
+      assert.deepEqual(actions.sort(), tablePermissions.get(table).sort());
+      assert.deepEqual(statement.Resource, { 'Fn::GetAtt': [table, 'Arn'] });
+      tablePermissions.delete(table);
+    } else for (const action of actions) {
+      assert.ok(Object.hasOwn(expected, action), `Unexpected or wildcard action: ${action}`);
+      assert.deepEqual(statement.Resource, expected[action], action);
+      delete expected[action];
+    }
+  }
+  assert.equal(tablePermissions.size, 0);
+  assert.deepEqual(expected, {});
+  for (const role of Object.values(template.findResources('AWS::IAM::Role'))) {
+    assert.equal(role.Properties.ManagedPolicyArns, undefined);
+    assert.equal(role.Properties.Policies, undefined);
+    assert.deepEqual(role.Properties.AssumeRolePolicyDocument.Statement,
+      [{ Effect: 'Allow', Action: 'sts:AssumeRole', Principal: { Service: 'lambda.amazonaws.com' } }]);
+  }
+});

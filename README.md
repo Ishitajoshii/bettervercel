@@ -86,6 +86,8 @@ This permanently deletes only `deployments/smoke-001/`, invalidates its viewer a
 
 ## Remove infrastructure
 
+If the control plane is installed, first record the table names from `control-outputs.json`, run `npm run destroy:api`, and handle the retained metadata tables as described in [API teardown](api/README.md#teardown). Then remove hosting below. API deployment artifacts need their exact project/deployment prefixes removed by the operator, or must expire through lifecycle; `delete:sample` only accepts legacy sample IDs. The bucket must also be emptied of `dashboard/` objects before hosting teardown. Review/export anything needed before deletion.
+
 1. Delete every uploaded demo using `delete:sample` and its exact ID. The bucket is deliberately not auto-emptied.
 2. Review `cdk-outputs.json` and your selected AWS profile/account.
 3. Run `npm run destroy:infra` and accept CDK's confirmation for `BetterVercelStaticStack`.

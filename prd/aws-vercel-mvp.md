@@ -199,13 +199,37 @@ Implementation and verification:
 - [Workflow template](../examples/github-actions/deploy.yml) uses an encrypted repository token, read-only GitHub permissions, trusted same-repository PRs, and environment variables for branch/PR metadata. [Setup and framework guide](../docs/frameworks-and-actions.md) covers vendoring this unpublished CLI, Vite/Astro/React/Next configuration, retries, and dashboard operations. A hosted GitHub Actions run has not been performed; the milestone task is to provide the workflow, while running both sample deployments in GitHub remains release acceptance work.
 - Existing limitations remain: trusted projects share a browser origin; known uploaded paths are public before finalize; artifacts expire after seven days; SPA fallback, origin isolation, production aliases, and browser interaction acceptance remain open.
 
+### Milestone 4 follow-up review — October 24, 2026 (IST)
+
+Reviewed every milestone 4 task against the implementation; the original 51 tests passed before changes.
+
+| Task | Evidence | Result |
+| --- | --- | --- |
+| Static dashboard: projects, deployments, state, preview, delete | `dashboard/app.js`, `tests/dashboard.test.mjs`, authenticated GET/DELETE handlers and deletion adapter tests | Implemented; DOM tests verify authentication, safe text rendering, token clearing and confirmed deletion through cache completion |
+| Operator-created API key; no public signup | IAM-only `POST /v1/projects`, salted per-project deploy-token hashes, dashboard in-memory credentials, route/auth tests | Implemented with operator-issued project tokens; no global browser admin key |
+| Copy-paste encrypted-token GitHub workflow | `examples/github-actions/deploy.yml`, `docs/frameworks-and-actions.md` | Provided; read-only repository permissions, no checkout credentials retained, same-repository trusted PRs only, secret passed through the environment |
+| Branch/PR metadata | Workflow environment, CLI metadata test, API normalization/idempotency tests, dashboard metadata rendering | Implemented and tested |
+| Framework and Next static-export documentation | `docs/frameworks-and-actions.md`, `cli/README.md`, runnable Vite/Next fixtures | Documented, including deployment base paths, Next directory export, unsupported server features and current SPA limitation |
+
+This review does not claim a hosted GitHub Actions run or browser hydration/click acceptance. Those remain release acceptance work. Earlier milestone 4 live delivery/CORS/deletion evidence above was not rerun here; the expanded live API release checks below are new.
+
 ### Milestone 5 — release gate
 
-- [ ] Test two projects and prove tokens cannot cross-write.
+- [x] Test two projects and prove tokens cannot cross-write.
 - [ ] Test empty artifact, interrupted upload, duplicate finalize, large file, and SPA fallback.
 - [ ] Review IAM: no wildcard write/read beyond required prefixes.
 - [ ] Verify lifecycle policies, logs, Free Tier, budget alert email, and teardown procedure.
 - [ ] Deploy 2–3 own sites before letting anyone else in.
+
+Initial release-gate work — October 24, 2026 (IST):
+
+- `npm run check` passed TypeScript checking, API bundling and all 56 tests. Hosting synthesis/read-only live CDK diff succeeded: the only change is the narrowed S3 bucket-policy read grant, with no resource replacement or budget change. Control-plane synthesis also succeeded. No infrastructure update was deployed in this review.
+- Fixed the default API test fixture to issue independent tokens for its two projects. Added a bidirectional authorization matrix covering create, project details, list, get, finalize and delete; denied calls leave records, signed URLs and cleanup unchanged. The deletion test advances beyond the upload guard so it specifically proves authorization.
+- Extended `npm run verify:api` to deploy into two independent projects and exercise token/presigned-prefix isolation in both directions. It also checks empty and zero-byte artifacts, per-file and aggregate size rejection, partial-upload rejection, resumption without extending the deadline, immutable writes, checksum enforcement, concurrent/duplicate finalize, isolated lists and exact preview bytes. The live run passed in approximately 23 seconds. Credential-free evidence: ignored `.build/release-gate-api-1792783626667.json`; projects `pe1203976c47982d3` and `p909eca10c2e6842d`. Two disposable previews were created; existing sites were not changed. Artifacts expire after seven days and metadata is retained.
+- Reviewed synthesized runtime IAM permissions: exact metadata tables, own log group, project artifact prefix, prefix-conditioned bucket listing, create-only PUT deny and the existing CloudFront distribution. Added exact resource/action regression checks, including rejection of extra or managed policy grants. The shared Lambda role spans all projects; the handler's project authentication and signed object keys enforce per-token isolation.
+- Found CDK's generated CloudFront OAC grant read the entire artifact bucket. Narrowed its resources in source to `deployments/*` and `dashboard/*`, preserving the exact distribution condition, TLS deny and resource identities. This hosting policy change is pending deployment and live verification, so the IAM release task remains unchecked. The TLS deny's broad action is intentional and grants no access.
+- Local infrastructure checks cover seven-day artifact expiry, one-day incomplete multipart cleanup, three-day logs, retained metadata and $1/$3/$5 budget-email configuration. Clarified control-plane-first teardown and retained tables in the root README. Current Free Tier/cost data, actual alert-email receipt and a teardown rehearsal have not been verified in this review; that combined task remains unchecked.
+- SPA history fallback remains unimplemented. The upload edge cases above passed locally and live, but the combined task stays open until explicit per-deployment fallback works without masking missing assets or unrelated deployments. The two disposable smoke fixtures do not count as 2–3 accepted own sites. Hosted Vite/Next Actions runs, browser interaction acceptance, shared-origin isolation and the low-traffic month cost criterion remain open.
 
 ## Later upgrade path
 

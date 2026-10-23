@@ -10,7 +10,11 @@ const manifest = (projectId = a) => ({ projectId, framework: 'vite', commitSha: 
 ] });
 async function fixture() {
   const credentials = await issueToken();
-  const projects = new Map([a, b].map(projectId => [projectId, { projectId, ...credentials }]));
+  const otherCredentials = await issueToken();
+  const projects = new Map([
+    [a, { projectId: a, ...credentials }],
+    [b, { projectId: b, ...otherCredentials }],
+  ]);
   const records = new Map();
   let time = Date.parse('2026-10-23T18:00:00Z');
   let validation = { complete: true, valid: true };
@@ -148,6 +152,72 @@ test('idempotency survives concurrent creates and rejects changed manifests', as
   assert.equal((await f.request('POST /v1/deployments', changed)).status, 409);
   const otherProject = normalizeRequest(manifest(b), 'deploy-key-001');
   assert.notEqual(otherProject.deploymentId, results[0].body.deploymentId);
+});
+
+test('release gate: two independent project tokens cannot access or mutate each other in either direction', async () => {
+  const f = await fixture();
+  const created = new Map();
+  for (const owner of [a, b]) {
+    const result = await f.request('POST /v1/deployments', manifest(owner), { token: f.projects.get(owner).token });
+    assert.equal(result.status, 201);
+    created.set(owner, result.body);
+  }
+  assert.notEqual(f.projects.get(a).token, f.projects.get(b).token);
+  assert.notEqual(created.get(a).deploymentId, created.get(b).deploymentId);
+  // Make deletion eligible so the test proves authentication, not the upload-window guard.
+  f.advance(961_000);
+  const before = structuredClone([...f.records]);
+  const signCount = f.signs.length;
+  for (const [owner, attacker] of [[a, b], [b, a]]) {
+    const params = { projectId: owner, deploymentId: created.get(owner).deploymentId };
+    for (const [route, body] of [
+      ['POST /v1/deployments', manifest(owner)],
+      ['GET /v1/projects/{projectId}'], ['GET /v1/projects/{projectId}/deployments'],
+      ['GET /v1/deployments/{deploymentId}'], ['POST /v1/deployments/{deploymentId}/finalize'],
+      ['DELETE /v1/deployments/{deploymentId}'],
+    ]) assert.equal((await f.request(route, body, { params, token: f.projects.get(attacker).token })).status, 401, `${attacker}: ${route}`);
+    const list = await f.request('GET /v1/projects/{projectId}/deployments', undefined,
+      { params: { projectId: owner }, token: f.projects.get(owner).token });
+    assert.deepEqual(list.body.deployments.map(record => record.deploymentId), [created.get(owner).deploymentId]);
+  }
+  assert.deepEqual([...f.records], before);
+  assert.equal(f.signs.length, signCount);
+  assert.equal(f.transitions(), 0);
+  assert.deepEqual(f.removed, []);
+});
+
+test('release gate: empty and oversized artifacts fail before records or upload URLs are created', async () => {
+  const f = await fixture();
+  const cases = [
+    { ...manifest(), files: [] },
+    { ...manifest(), files: [{ ...manifest().files[0], size: 0, sha256: digest('') }] },
+    { ...manifest(), files: [{ ...manifest().files[0], size: MAX_BYTES + 1 }] },
+    { ...manifest(), files: [...manifest().files, { ...manifest().files[0], path: 'large.html', size: MAX_BYTES }] },
+  ];
+  for (const input of cases) assert.equal((await f.request('POST /v1/deployments', input)).status, 400);
+  assert.equal(f.records.size, 0);
+  assert.equal(f.signs.length, 0);
+});
+
+test('release gate: interrupted uploads resume under the same ID and duplicate finalize preserves ready time', async () => {
+  const f = await fixture();
+  const created = await f.request('POST /v1/deployments', manifest());
+  const params = { deploymentId: created.body.deploymentId };
+  f.setValidation({ complete: false, valid: false });
+  assert.equal((await f.request('POST /v1/deployments/{deploymentId}/finalize', undefined, { params })).status, 409);
+  f.advance(120_000);
+  const resumed = await f.request('POST /v1/deployments', manifest());
+  assert.equal(resumed.status, 200);
+  assert.equal(resumed.body.deploymentId, params.deploymentId);
+  assert.equal(resumed.body.uploadExpiresAt, created.body.uploadExpiresAt);
+  assert.equal(resumed.body.uploads.length, 1);
+  f.setValidation({ complete: true, valid: true });
+  const ready = await f.request('POST /v1/deployments/{deploymentId}/finalize', undefined, { params });
+  f.advance(1_000_000);
+  const duplicate = await f.request('POST /v1/deployments/{deploymentId}/finalize', undefined, { params });
+  assert.equal(duplicate.status, 200);
+  assert.equal(duplicate.body.readyAt, ready.body.readyAt);
+  assert.equal(f.transitions(), 1);
 });
 
 test('manifest rejects traversal, URL escapes, duplicate files, MIME spoofing and size/count limits', () => {
