@@ -19,6 +19,7 @@
     "deploy:api": "node scripts/control-infra.mjs deploy",
     "verify:api": "node scripts/verify-api.mjs",
     "verify:cli": "node scripts/verify-cli.mjs",
+    "verify:spa": "node scripts/verify-spa.mjs",
     "upload:dashboard": "node scripts/upload-dashboard.mjs",
     "verify:dashboard": "node scripts/verify-dashboard.mjs",
     "create:project": "node scripts/create-project.mjs",

@@ -52,13 +52,15 @@ Detection reads dependencies/devDependencies in that directory's `package.json`;
 
 Builds run only from the explicit `buildCommand` in this file, with the project as working directory. Without `--build-command`, `init` writes `null` and deployment uploads prebuilt output. It never infers or runs a package's build script automatically, installs dependencies, or runs a hosted build. `--skip-build` bypasses a configured build for retries. Treat build configuration as executable code and review it before deploying an unfamiliar checkout. Build stdout/stderr stays in your terminal; the CLI removes its token environment variable from the child process, but local build commands still run with your user permissions.
 
-The CLI sets `BETTERVERCEL_BASE_PATH` and `BETTERVERCEL_DEPLOYMENT_ID` before the build. Vite's `base: './'` works with the included sample. Next.js needs `output: 'export'`, `trailingSlash: true`, and `basePath: process.env.BETTERVERCEL_BASE_PATH || ''`. The CLI rejects HTML URLs outside the preview path, including Next output built for a different deployment ID. Turbopack filenames containing `~` are supported. See [framework setup, the Next fixture, and GitHub Actions](../docs/frameworks-and-actions.md). Framework detection does not rewrite URLs or make SSR output deployable. SPA history fallback is not yet available.
+The CLI sets `BETTERVERCEL_BASE_PATH` and `BETTERVERCEL_DEPLOYMENT_ID` before the build. Vite's `base: './'` works with the included static sample. Next.js needs `output: 'export'`, `trailingSlash: true`, and `basePath: process.env.BETTERVERCEL_BASE_PATH || ''`. The CLI rejects HTML URLs outside the preview path, including Next output built for a different deployment ID. Turbopack filenames containing `~` are supported. See [framework setup, opt-in SPA routing, the Next fixture, and GitHub Actions](../docs/frameworks-and-actions.md). Framework detection does not rewrite URLs or make SSR output deployable.
+
+After the SPA hosting/API rollout, opt in with `init --routing spa` or `"routing": "spa"` in `bettervercel.json`. This supplies a base path ending in `/_spa`; configure Vite's absolute `base` and your client router from it. SPA output rejects relative HTML URLs that would break on deep links. Static remains the default, and Next exports require static routing. Mode changes require a fresh key and rebuild. The CLI detects an older API that ignores SPA mode and stops before uploading.
 
 ## Commands and retries
 
 ```text
 bettervercel login [directory] [--api URL --project ID] [--token-stdin]
-bettervercel init [directory] --api URL --project ID [--output dist] [--build-command "npm run build"]
+bettervercel init [directory] --api URL --project ID [--output dist] [--build-command "npm run build"] [--routing static|spa]
 bettervercel deploy [directory] [--skip-build] [--idempotency-key KEY] [--commit SHA] [--concurrency 4]
 bettervercel status [deployment-id] [--directory path]
 bettervercel logs [deployment-id] [--directory path]

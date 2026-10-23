@@ -91,6 +91,33 @@ test('branch and PR metadata round trip, validate, and participate in idempotenc
   }
 });
 
+test('SPA routing is explicit, immutable, project-scoped and backward compatible with static request hashes', async () => {
+  const normal = normalizeRequest(manifest(), 'spa-routing-key');
+  assert.equal(normal.requestHash, normalizeRequest({ ...manifest(), routing: 'static' }, 'spa-routing-key').requestHash);
+  const spa = normalizeRequest({ ...manifest(), routing: 'spa' }, 'spa-routing-key');
+  assert.equal(spa.deploymentId, normal.deploymentId);
+  assert.notEqual(spa.requestHash, normal.requestHash);
+  assert.equal(prefix(spa), `deployments/${a}/_spa/${spa.deploymentId}/`);
+  assert.notEqual(prefix(spa), prefix(normal));
+  for (const change of [{ routing: true }, { routing: null }, { routing: 'unknown' }, { routing: 'spa', framework: 'next-static' }]) {
+    assert.throws(() => normalizeRequest({ ...manifest(), ...change }, 'spa-routing-key'));
+  }
+  const reserved = manifest(); reserved.files.push({ ...reserved.files[0], path: '_spa/index.html' });
+  assert.throws(() => normalizeRequest(reserved, 'spa-routing-key'), /reserved/);
+  const f = await fixture();
+  const input = { ...manifest(), routing: 'spa' };
+  const created = await f.request('POST /v1/deployments', input);
+  const params = { deploymentId: created.body.deploymentId };
+  assert.equal(created.body.routing, 'spa');
+  assert.ok(f.signs.every(sign => sign.key.startsWith(`deployments/${a}/_spa/${params.deploymentId}/`)));
+  assert.equal((await f.request('POST /v1/deployments', manifest())).status, 409);
+  assert.equal((await f.request('POST /v1/deployments/{deploymentId}/finalize', undefined,
+    { params, token: f.projects.get(b).token })).status, 401);
+  const ready = await f.request('POST /v1/deployments/{deploymentId}/finalize', undefined, { params });
+  assert.equal(ready.body.previewUrl, `https://test.cloudfront.net/d/${params.deploymentId}/_spa/`);
+  assert.equal((await f.request('POST /v1/deployments', input)).body.uploads.length, 0);
+});
+
 test('deletion waits for signed URLs to expire, isolates tokens, retries partial failure and waits for cache removal', async () => {
   const f = await fixture();
   f.projects.set(b, { projectId: b, ...await issueToken() });

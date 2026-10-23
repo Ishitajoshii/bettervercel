@@ -1,6 +1,6 @@
 # Static frameworks and GitHub Actions
 
-The CLI builds on your machine or on a trusted GitHub runner. AWS receives static output only. Each deployment lives at `/d/<deployment-id>/`; links and assets must work beneath that path. The CLI sets `BETTERVERCEL_BASE_PATH` (no trailing slash) and `BETTERVERCEL_DEPLOYMENT_ID` before running the explicitly configured `buildCommand`. It rejects HTML `src`/`href` paths pointing outside the preview. This is a common-mistake check, not a full parser of CSS or runtime-generated URLs.
+The CLI builds on your machine or on a trusted GitHub runner. AWS receives static output only. Static deployments live at `/d/<deployment-id>/`; opt-in SPA deployments use `/d/<deployment-id>/_spa/`. Links and assets must work beneath the issued preview path. The CLI sets `BETTERVERCEL_BASE_PATH` (no trailing slash) and `BETTERVERCEL_DEPLOYMENT_ID` before running the explicitly configured `buildCommand`. It rejects HTML `src`/`href` paths pointing outside the preview. This is a common-mistake check, not a full parser of CSS or runtime-generated URLs.
 
 ## Framework configuration
 
@@ -12,7 +12,19 @@ The CLI builds on your machine or on a trusted GitHub runner. AWS receives stati
 | Next.js static export | `out` | Use the configuration below; rebuild for each new deployment ID |
 | Other static output | explicit directory | Pass `--output` to init; use relative paths or the supplied preview base |
 
-History-based SPA fallback is still milestone 5 work. Use hash routing or exported directory indexes. The router supports `/about/` → `about/index.html`; it does not map `/about/` to `about.html`. SSR, API routes, middleware, server actions, ISR, and the default Next image optimization service are unsupported.
+Static routing supports `/about/` → `about/index.html`; it does not map `/about/` to `about.html`. SSR, API routes, middleware, server actions, ISR, and the default Next image optimization service are unsupported.
+
+### Opt-in SPA history routing
+
+The source now supports `bettervercel init ... --routing spa`, or `"routing": "spa"` in `bettervercel.json`. Deploy the updated hosting router and control API before using it; live rollout is tracked in [TODO.md](../TODO.md). Omitted routing or `"static"` preserves the static-export behavior. Next static export must use static routing.
+
+The CLI supplies the complete SPA base path to the build. For Vite, set `base: process.env.BETTERVERCEL_BASE_PATH + '/'` and configure the client router's basename from the same value (Vite exposes `import.meta.env.BASE_URL`). Relative HTML asset URLs such as `./assets/app.js` break at nested URLs and are rejected for SPA output. Use the absolute preview base for assets and links; the relative settings in the framework table apply to static routing only. Hash links and external URLs are permitted.
+
+Extensionless paths such as `/settings/profile` and `/settings/profile/` serve the SPA's root `index.html`. Paths containing a dot, including JavaScript, CSS, JSON and dotted route segments, remain exact object requests; missing files still fail. Use extensionless history routes. The root `_spa` output directory is reserved. Changing routing mode changes request identity: use a new idempotency key and rebuild.
+
+SPA objects use a separate project-owned storage namespace, so requesting `/_spa/` on an ordinary static deployment cannot return that deployment's root HTML. No global 403/404 fallback, database lookup, extra AWS service or new IAM grant is added. Known uploaded SPA paths remain public before finalization, just like static previews.
+
+After both stack updates, `npm run verify:spa` builds and deploys disposable SPA and static Vite fixtures. It checks exact artifact bytes/MIME, deep links with queries, missing assets, namespace isolation, unknown deployment IDs and the two-minute post-build target. It retains credentials separately under ignored `.build/spa-smoke-*/` for later cleanup; results contain no tokens. Browser interaction acceptance is separate.
 
 ### Next.js
 

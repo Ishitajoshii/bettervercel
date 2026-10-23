@@ -41,6 +41,55 @@ test('deploy supplies its deterministic build path and sends CI branch and PR me
   assert.equal(result.branch, 'feature/dashboard'); assert.equal(result.pullRequest, 23);
   assert.equal(result.commitSha, 'abcdef0');
 });
+
+test('SPA init/deploy supplies the full base path, uses separate storage, and preserves mode across retries', async t => {
+  const root = await temp(t); const svc = await service(t);
+  const context = { cwd: root, env: { BETTERVERCEL_TOKEN: svc.token }, output: { write() {} },
+    build: async (directory, config, { env }) => {
+      assert.equal(config.routing, 'spa');
+      const base = `/d/${env.BETTERVERCEL_DEPLOYMENT_ID}/_spa`;
+      assert.equal(env.BETTERVERCEL_BASE_PATH, base);
+      await outputFiles(directory, { 'index.html': `<script src="${base}/assets/app.js"></script>`, 'assets/app.js': 'console.log(1)' });
+    } };
+  await runCli(['init', '--api', svc.base, '--project', projectId, '--output', 'dist', '--routing', 'spa', '--build-command', 'explicit-build'], context);
+  assert.equal((await loadProject(root)).routing, 'spa');
+  const ready = await runCli(['deploy', '--idempotency-key', 'spa-cli-integration'], context);
+  assert.equal(ready.routing, 'spa');
+  assert.equal(new URL(ready.previewUrl).pathname, `/d/${ready.deploymentId}/_spa/`);
+  assert.ok([...svc.objects.keys()].every(key => key.startsWith(`deployments/${projectId}/_spa/${ready.deploymentId}/`)));
+  const retry = await runCli(['deploy', '--skip-build', '--idempotency-key', 'spa-cli-integration'], context);
+  assert.equal(retry.readyAt, ready.readyAt);
+  assert.equal(svc.counts().finalizeCount, 1);
+});
+
+test('SPA configuration rejects unsupported modes and relative HTML assets that break on deep links', () => {
+  for (const routing of [true, '', null, 'auto']) assert.throws(() => validateConfig({ ...config, routing }), /routing/);
+  assert.throws(() => validateConfig({ ...config, framework: 'next-static', routing: 'spa' }), /static routing/);
+  const files = html => [{ path: 'index.html', body: Buffer.from(html) }];
+  for (const html of ['<script src="./assets/app.js"></script>', '<link href="assets/style.css">', '<img src="../image.png">']) {
+    assert.throws(() => validatePreviewPaths(files(html), '/d/current/_spa', 'spa'), /Relative URL/);
+  }
+  validatePreviewPaths(files('<script src="/d/current/_spa/assets/app.js"></script><a href="#section">Jump</a>'), '/d/current/_spa', 'spa');
+});
+
+test('SPA deploy refuses an older API that ignores routing before uploading any artifact', async t => {
+  const root = await temp(t); const svc = await service(t);
+  await writeFile(join(root, 'bettervercel.json'), JSON.stringify({ ...config, apiUrl: svc.base, routing: 'spa' }));
+  await outputFiles(root, { 'index.html': '<h1>SPA</h1>' });
+  await assert.rejects(runCli(['deploy', '--idempotency-key', 'spa-old-api-key'], {
+    cwd: root, env: { BETTERVERCEL_TOKEN: svc.token }, output: { write() {} },
+    fetchImpl: async (url, options) => {
+      const response = await fetch(url, options);
+      if (options.method === 'POST' && url.endsWith('/v1/deployments')) {
+        const body = await response.json(); delete body.routing;
+        return new Response(JSON.stringify(body), { status: response.status });
+      }
+      return response;
+    },
+  }), /did not accept the requested routing/);
+  assert.equal(svc.objects.size, 0);
+  assert.equal(svc.counts().finalizeCount, 0);
+});
 async function temp(t) {
   const root = await mkdtemp(join(tmpdir(), 'bettervercel-cli-'));
   t.after(() => rm(root, { recursive: true, force: true }));

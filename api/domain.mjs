@@ -48,6 +48,8 @@ export function normalizeRequest(input, idempotencyKey) {
     'Idempotency-Key must contain 8–128 letters, digits, underscores, or hyphens.');
   requireValue(input && validProject(input.projectId), 'Invalid project ID.');
   requireValue(['vite', 'astro', 'next-static', 'static'].includes(input.framework), 'Unsupported static framework.');
+  requireValue(input.routing === undefined || ['static', 'spa'].includes(input.routing), 'routing must be static or spa.');
+  requireValue(input.routing !== 'spa' || input.framework !== 'next-static', 'Next static export requires static routing.');
   requireValue(input.commitSha === undefined || (typeof input.commitSha === 'string' && /^[a-f0-9]{7,40}$/.test(input.commitSha)), 'Invalid commit SHA.');
   requireValue(input.branch === undefined || (typeof input.branch === 'string' && input.branch.length > 0 && input.branch.length <= 255 && !/[\x00-\x1f\x7f]/.test(input.branch)), 'Invalid branch.');
   requireValue(input.pullRequest === undefined || (Number.isSafeInteger(input.pullRequest) && input.pullRequest > 0 && input.pullRequest <= 2147483647), 'Invalid pull request number.');
@@ -61,6 +63,7 @@ export function normalizeRequest(input, idempotencyKey) {
       !file.path.split('/').some(part => part === '.' || part === '..') && !seen.has(file.path),
     'Invalid or duplicate manifest path.');
     seen.add(file.path);
+    requireValue(file.path.split('/')[0] !== '_spa', 'The root _spa directory is reserved for SPA routing.');
     requireValue(Number.isSafeInteger(file.size) && file.size >= 0 && file.size <= MAX_BYTES, 'Invalid file size.');
     totalBytes += file.size;
     const contentType = artifactContentType(file.path);
@@ -71,21 +74,25 @@ export function normalizeRequest(input, idempotencyKey) {
   requireValue(totalBytes > 0 && totalBytes <= MAX_BYTES, 'Artifact must contain 1 byte–25 MiB.');
   requireValue(files.some(file => file.path === 'index.html' && file.size > 0), 'A nonempty index.html is required.');
   const request = { projectId: input.projectId, framework: input.framework, commitSha: input.commitSha ?? null, files,
+    ...(input.routing === 'spa' ? { routing: 'spa' } : {}),
     ...(input.branch !== undefined ? { branch: input.branch } : {}),
     ...(input.pullRequest !== undefined ? { pullRequest: input.pullRequest } : {}) };
   return { ...request, totalBytes, requestHash: digest(JSON.stringify(request)),
     deploymentId: deploymentIdFor(input.projectId, idempotencyKey) };
 }
-export function prefix(record) { return `deployments/${record.projectId}/${record.deploymentId}/`; }
+// SPA artifacts occupy a separate namespace that ordinary deployment uploads cannot create.
+// This lets the edge select routing without a database lookup or a global HTML error fallback.
+export function prefix(record) { return `deployments/${record.projectId}/${record.routing === 'spa' ? '_spa/' : ''}${record.deploymentId}/`; }
+export function previewBasePath(deploymentId, routing) { return `/d/${deploymentId}${routing === 'spa' ? '/_spa' : ''}`; }
 export function summary(record, domain) {
   return {
     projectId: record.projectId, deploymentId: record.deploymentId, status: record.status,
-    framework: record.framework, commitSha: record.commitSha, createdAt: record.createdAt,
+    framework: record.framework, routing: record.routing ?? 'static', commitSha: record.commitSha, createdAt: record.createdAt,
     branch: record.branch ?? null, pullRequest: record.pullRequest ?? null,
     deletedAt: record.deletedAt ?? null,
     readyAt: record.readyAt ?? null, uploadExpiresAt: record.uploadExpiresAt,
     totalBytes: record.totalBytes, fileCount: record.files.length,
-    previewUrl: record.status === 'ready' ? `https://${domain}/d/${record.deploymentId}/` : null,
+    previewUrl: record.status === 'ready' ? `https://${domain}${previewBasePath(record.deploymentId, record.routing)}/` : null,
     logs: record.logs,
   };
 }

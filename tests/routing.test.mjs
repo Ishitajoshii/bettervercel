@@ -44,3 +44,24 @@ test('API previews map to the owning project and legacy previews remain compatib
   assert.equal(route(`/d/${id}/assets/app.js`).uri, `/deployments/${project}/${id}/assets/app.js`);
   assert.equal(route('/d/milestone-1/').uri, '/deployments/milestone-1/index.html');
 });
+
+test('SPA namespace rewrites extensionless deep links only and never uses a static deployment root', () => {
+  const project = 'p1111111111111111';
+  const id = `${project}-${'a'.repeat(32)}`;
+  const base = `/d/${id}/_spa`;
+  const storage = `/deployments/${project}/_spa/${id}`;
+  assert.equal(route(base).headers.location.value, base + '/');
+  for (const path of ['/', '/settings', '/settings/profile/', '/nested/missing-route']) {
+    assert.equal(route(base + path).uri, storage + '/index.html');
+  }
+  for (const path of ['/index.html', '/assets/app.js', '/missing.css', '/missing.js/', '/user.name/settings', '/missing.json']) {
+    assert.equal(route(base + path).uri, storage + path);
+  }
+  assert.equal(route(`/d/${id}/settings/`).uri, `/deployments/${project}/${id}/settings/index.html`);
+  assert.notEqual(route(base + '/').uri, route(`/d/${id}/`).uri);
+  for (const path of ['/../other', '/%2e%2e/other', '/assets%2fapp.js', '/a\\b']) assert.equal(route(base + path).statusCode, 404);
+  const request = { uri: base + '/settings', querystring: { tab: { value: 'profile' } }, method: 'GET' };
+  const result = context.handler({ request });
+  assert.equal(result.uri, storage + '/index.html');
+  assert.equal(result.querystring.tab.value, 'profile');
+});

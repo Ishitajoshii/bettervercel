@@ -70,7 +70,7 @@ npm run verify:sample -- --id smoke-001
 
 Open the printed `https://<distribution>.cloudfront.net/d/smoke-001/` URL and click the button to check JavaScript in the browser. Vite uses relative asset URLs so the build works under the preview path. The automated verification checks HTTPS redirects, JS/CSS/HTML bytes and MIME types, cache headers and a repeat cache hit, private S3 access, missing-file errors, and blocked internal storage paths.
 
-The router supports directory indexes (`/docs/` → `docs/index.html`); SPA history fallback is not implemented yet. Unknown S3 objects can return 403 because public callers cannot list the bucket; this is an expected missing-file response for this proof.
+The router supports directory indexes (`/docs/` → `docs/index.html`). The source also supports opt-in SPA history routing after the hosting/API updates; see [SPA setup](docs/frameworks-and-actions.md#opt-in-spa-history-routing) and the rollout status in [TODO.md](TODO.md). Unknown S3 objects can return 403 because public callers cannot list the bucket; this is an expected missing-file response for this proof.
 
 All `/d/` previews are public and share one browser origin. Use your own trusted sample builds during this milestone. Per-project browser-origin isolation belongs in the hosting design before accepting unrelated users' pages.
 
@@ -96,5 +96,7 @@ If the control plane is installed, first record the table names from `control-ou
 The hosting stack contains the private S3 bucket and policy, CloudFront distribution, origin access controls, cache policy, request function, and dashboard security-header policy. Setting the budget email adds one AWS Budgets resource. No KMS key, Lambda, DNS zone, VPC, database, or builder is created by the hosting stack. Remove the `dashboard/` objects as well as deployment artifacts before destroying the bucket. Stopping CloudFront is not the teardown procedure; delete the stack when finished. Stack deletion also removes its budget.
 
 ## Plan
+
+The consolidated remaining-work checklist and current rollout status are in [TODO.md](TODO.md).
 
 See [the PRD and checklist](prd/aws-vercel-mvp.md) and [the deploy API guide](api/README.md). The milestone 1 helpers use the operator's local AWS identity and reject API deployment IDs. API clients use project bearer tokens and signed object URLs; `npm run verify:api` exercises the complete API flow with disposable projects.

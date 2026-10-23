@@ -2,14 +2,14 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { randomUUID } from 'node:crypto';
-import { deploymentIdFor, deploymentProject, normalizeRequest, validProject } from '../api/domain.mjs';
+import { deploymentIdFor, deploymentProject, normalizeRequest, previewBasePath, validProject } from '../api/domain.mjs';
 import { apiUrl, collectArtifacts, initProject, loadProject, readJson, runBuild, validatePreviewPaths } from './project.mjs';
 import { getToken, readToken, saveToken, validateToken } from './credentials.mjs';
 import { createClient, safeMessage, uploadArtifacts } from './client.mjs';
 
 const HELP = `Better Vercel — static deployments through the deploy API
 
-  bettervercel init [directory] --api URL --project ID [--output dist] [--build-command "npm run build"]
+  bettervercel init [directory] --api URL --project ID [--output dist] [--build-command "npm run build"] [--routing static|spa]
   bettervercel login [directory] [--api URL --project ID] [--token-stdin]
   bettervercel deploy [directory] [--skip-build] [--idempotency-key KEY] [--commit SHA] [--concurrency 4]
   bettervercel status [deployment-id] [--directory path]
@@ -26,9 +26,10 @@ const optionTypes = {
   api: 'string', project: 'string', output: 'string', 'build-command': 'string',
   'token-stdin': 'boolean', 'skip-build': 'boolean', 'idempotency-key': 'string', commit: 'string',
   concurrency: 'string', directory: 'string', help: 'boolean', branch: 'string', 'pull-request': 'string',
+  routing: 'string',
 };
 const allowed = {
-  init: ['api', 'project', 'output', 'build-command'], login: ['api', 'project', 'token-stdin'],
+  init: ['api', 'project', 'output', 'build-command', 'routing'], login: ['api', 'project', 'token-stdin'],
   deploy: ['skip-build', 'idempotency-key', 'commit', 'concurrency', 'branch', 'pull-request'], status: ['directory'], logs: ['directory'],
 };
 const statePath = root => resolve(root, '.bettervercel', 'deployment.json');
@@ -114,7 +115,7 @@ export async function runCli(args, { cwd = process.cwd(), env = process.env, inp
   const pullRequest = prValue ? Number(prValue) : undefined;
   const metadata = { ...(branch ? { branch } : {}), ...(pullRequest !== undefined ? { pullRequest } : {}) };
   const deploymentId = deploymentIdFor(config.projectId, key);
-  const buildEnv = { ...env, BETTERVERCEL_DEPLOYMENT_ID: deploymentId, BETTERVERCEL_BASE_PATH: `/d/${deploymentId}` };
+  const buildEnv = { ...env, BETTERVERCEL_DEPLOYMENT_ID: deploymentId, BETTERVERCEL_BASE_PATH: previewBasePath(deploymentId, config.routing) };
   if (!values['skip-build']) await build(root, config, { env: buildEnv, output });
   let artifacts;
   try { artifacts = await collectArtifacts(root, config); }
@@ -123,13 +124,17 @@ export async function runCli(args, { cwd = process.cwd(), env = process.env, inp
     throw error;
   }
   const body = { projectId: config.projectId, framework: config.framework, ...metadata, ...(commitSha ? { commitSha } : {}),
+    ...(config.routing === 'spa' ? { routing: 'spa' } : {}),
     files: artifacts.map(({ body: bytes, ...file }) => file) };
   const normalized = normalizeRequest(body, key);
-  validatePreviewPaths(artifacts, buildEnv.BETTERVERCEL_BASE_PATH);
+  validatePreviewPaths(artifacts, buildEnv.BETTERVERCEL_BASE_PATH, config.routing);
   if (Buffer.byteLength(JSON.stringify(body)) > 220_000) throw new Error('Manifest exceeds the 220,000-byte API request limit. Shorten paths or reduce file count.');
   output.write(`Uploading ${artifacts.length} files (${normalized.totalBytes} bytes). Idempotency key: ${key}\n`);
   try {
     const created = checkDeployment(await client.api('POST', '/v1/deployments', body, key), config, normalized.deploymentId);
+    if ((created.routing ?? 'static') !== (config.routing ?? 'static')) {
+      throw new Error('Deploy API did not accept the requested routing mode. Update the control plane, then deploy with a new idempotency key.');
+    }
     await writeState(root, { apiUrl: config.apiUrl, projectId: config.projectId, deploymentId: created.deploymentId, idempotencyKey: key });
     output.write(`Deployment: ${created.deploymentId}\n`);
     if (['failed', 'deleting', 'deleted'].includes(created.status)) throw new Error(`Deployment is ${created.status}. Use a new idempotency key for a fresh deployment.`);

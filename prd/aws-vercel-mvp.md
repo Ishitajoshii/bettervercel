@@ -105,9 +105,9 @@ Do not copy code until its license is reviewed. Start by reproducing lifecycle b
 ### Milestone 0 — cost safety
 
 - [x] Confirm account plan and Free Tier usage via AWS CLI (active Free plan; checked October 23, 2026).
-- [ ] Enable root MFA; use an admin IAM identity for setup.
+- [ ] Enable root MFA; use an admin IAM identity for setup. Root MFA verified enabled October 24; non-root setup identity remains open.
 - [x] Create monitoring-only $5 monthly AWS Budget with alerts above $1, $3, and $5, excluding credits/refunds.
-- [ ] Enable cost anomaly detection; set log retention to 3 days.
+- [x] Enable cost anomaly detection; set log retention to 3 days. Existing monitor/email subscription and live three-day logs verified October 24; lowering the default anomaly threshold is tracked in `TODO.md`.
 - [x] Select `ap-south-1` and document the teardown procedure in README.
 
 ### Milestone 1 — static deployment proof
@@ -229,7 +229,19 @@ Initial release-gate work — October 24, 2026 (IST):
 - Reviewed synthesized runtime IAM permissions: exact metadata tables, own log group, project artifact prefix, prefix-conditioned bucket listing, create-only PUT deny and the existing CloudFront distribution. Added exact resource/action regression checks, including rejection of extra or managed policy grants. The shared Lambda role spans all projects; the handler's project authentication and signed object keys enforce per-token isolation.
 - Found CDK's generated CloudFront OAC grant read the entire artifact bucket. Narrowed its resources in source to `deployments/*` and `dashboard/*`, preserving the exact distribution condition, TLS deny and resource identities. This hosting policy change is pending deployment and live verification, so the IAM release task remains unchecked. The TLS deny's broad action is intentional and grants no access.
 - Local infrastructure checks cover seven-day artifact expiry, one-day incomplete multipart cleanup, three-day logs, retained metadata and $1/$3/$5 budget-email configuration. Clarified control-plane-first teardown and retained tables in the root README. Current Free Tier/cost data, actual alert-email receipt and a teardown rehearsal have not been verified in this review; that combined task remains unchecked.
-- SPA history fallback remains unimplemented. The upload edge cases above passed locally and live, but the combined task stays open until explicit per-deployment fallback works without masking missing assets or unrelated deployments. The two disposable smoke fixtures do not count as 2–3 accepted own sites. Hosted Vite/Next Actions runs, browser interaction acceptance, shared-origin isolation and the low-traffic month cost criterion remain open.
+- At this initial checkpoint SPA history fallback was unimplemented. The upload edge cases above passed locally and live, but the combined task stays open until explicit per-deployment fallback works without masking missing assets or unrelated deployments. The two disposable smoke fixtures do not count as 2–3 accepted own sites. Hosted Vite/Next Actions runs, browser interaction acceptance, shared-origin isolation and the low-traffic month cost criterion remain open.
+
+### Milestone 5 follow-up — checklist, SPA implementation and operations audit
+
+The complete remaining-work checklist, including product decisions and deferred upgrades, is now [TODO.md](../TODO.md).
+
+- Implemented opt-in `routing: "spa"` through configuration, CLI, API normalization, immutable request identity, storage prefixes and the CloudFront router. Static behavior and old static request hashes are preserved. SPA URLs use `/d/<id>/_spa/`; only extensionless paths fall back to the deployment's root HTML. Dotted paths remain exact requests. SPA storage is `deployments/<project>/_spa/<id>/`, so static deployments cannot acquire fallback by changing their viewer URL. Next static export remains static-only.
+- Added CLI checks for relative HTML URLs that break at deep links and for older APIs that silently ignore routing mode. Existing project permissions cover the SPA namespace. Added tests for API/CLI routing contracts, token isolation, idempotency conflicts, deep paths/queries, exact asset paths, traversal rejection, validation/deletion/invalidation, retries and older-server rejection.
+- `npm run check` passes all **62 tests**. `scripts/verify-spa.mjs` passes syntax checking and is available as `npm run verify:spa` for post-deployment acceptance; it has not been run against AWS yet. The script builds two Vite fixtures and verifies static/SPA behavior, bytes/MIME, namespace isolation, missing assets, unknown deployments and post-build timing.
+- Read-only CDK diffs show only the hosting bucket-policy restriction and router code, plus control Lambda code. No new AWS services, IAM grants or resource replacements. Hosting/API deployment and live SPA verification remain open. Both local profiles (`default`, `bettervercel`) and the AWS connector identify as root; the PRD's non-root setup identity is needed before rollout.
+- Live AWS APIs confirm root MFA is enabled, artifact expiry is seven days, incomplete multipart cleanup is one day and the control log group retains three days. Retention is complete in the checklist. Evidence is in ignored `.build/operations-audit-20261024.json`.
+- An existing SERVICE anomaly monitor and DAILY email subscription are active; its subscriber is confirmed. The current threshold requires both $100 and 40% impact, so budget-appropriate threshold adjustment remains open. The $5 budget is healthy, excludes credits/refunds and has actual-cost thresholds at $1/$3/$5. This does not prove receipt of a budget alert email. Evidence: ignored `.build/notifications-audit-20261024.json`.
+- Free plan is ACTIVE. A single cached Cost Explorer query for October 1–23, excluding credits/refunds, reports $0; all days are estimated and contain no service groups. This is not mature project-attributed billing data or a completed low-traffic month. Evidence: ignored `.build/cost-audit-20261024.json`.
 
 ## Later upgrade path
 

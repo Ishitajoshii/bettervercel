@@ -41,6 +41,31 @@ test('real S3 presigner binds key, size, MIME, cache policy, checksum, and creat
   client.destroy();
 });
 
+test('SPA validation, deletion and invalidation target its separate project namespace', async () => {
+  const spa = { ...record, routing: 'spa' };
+  const root = `deployments/${record.projectId}/_spa/${record.deploymentId}/`;
+  const commands = [];
+  const objects = createObjects({ async send(command) {
+    commands.push(command);
+    if (command.constructor.name === 'ListObjectsV2Command') {
+      assert.equal(command.input.Prefix, root);
+      return { Contents: [{ Key: root + file.path, Size: file.size }] };
+    }
+    if (command.constructor.name === 'HeadObjectCommand') {
+      assert.equal(command.input.Key, root + file.path); return metadata;
+    }
+    return {};
+  } }, 'bucket');
+  assert.deepEqual(await objects.validate(spa), { complete: true, valid: true });
+  await objects.remove(spa);
+  assert.deepEqual(commands.at(-1).input.Delete.Objects, [{ Key: root + file.path }]);
+  const delivery = createDelivery({ async send(command) {
+    assert.deepEqual(command.input.InvalidationBatch.Paths.Items, [`/d/${record.deploymentId}*`, `/${root}*`]);
+    return { Invalidation: { Status: 'Completed' } };
+  } }, 'E123');
+  assert.equal(await delivery.remove(spa), true);
+});
+
 test('S3 validation checks stored bytes, metadata, checksum, missing and unexpected keys', async () => {
   for (const [label, listing, head, expected] of [
     ['valid', [{ Key: prefix(record) + file.path, Size: 5 }], metadata, { complete: true, valid: true }],

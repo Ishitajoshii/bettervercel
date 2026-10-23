@@ -38,6 +38,8 @@ export function validateConfig(config) {
   if (!validProject(config.projectId)) throw new Error('Set a valid operator-created project ID with --project.');
   const api = apiUrl(config.apiUrl);
   if (!['vite', 'astro', 'next-static', 'static'].includes(config.framework)) throw new Error('Unsupported framework in bettervercel.json.');
+  if (config.routing !== undefined && !['static', 'spa'].includes(config.routing)) throw new Error('routing must be static or spa.');
+  if (config.routing === 'spa' && config.framework === 'next-static') throw new Error('Next static export requires static routing.');
   if (typeof config.outputDirectory !== 'string' || !config.outputDirectory.trim() || isAbsolute(config.outputDirectory) ||
       config.outputDirectory.includes(':') || config.outputDirectory.split(/[\\/]/).includes('..') ||
       config.outputDirectory.split(/[\\/]/).every(part => !part || part === '.')) {
@@ -47,12 +49,14 @@ export function validateConfig(config) {
     throw new Error('Set buildCommand to an explicit local command, or null for prebuilt output.');
   }
   return { apiUrl: api, projectId: config.projectId, framework: config.framework,
+    ...(config.routing === 'spa' ? { routing: 'spa' } : {}),
     outputDirectory: config.outputDirectory, buildCommand: config.buildCommand };
 }
 
 export async function initProject(root, options) {
   const detected = await detectFramework(root);
   const config = validateConfig({ ...detected, apiUrl: options.api, projectId: options.project,
+    routing: options.routing,
     outputDirectory: options.output ?? detected.outputDirectory, buildCommand: options['build-command'] ?? null });
   try { await writeFile(resolve(root, CONFIG_NAME), JSON.stringify(config, null, 2) + '\n', { flag: 'wx' }); }
   catch (error) {
@@ -64,11 +68,18 @@ export async function initProject(root, options) {
 
 export async function loadProject(root) { return validateConfig(await readJson(resolve(root, CONFIG_NAME))); }
 
-export function validatePreviewPaths(artifacts, basePath) {
+export function validatePreviewPaths(artifacts, basePath, routing) {
   for (const file of artifacts.filter(file => file.path.endsWith('.html'))) {
     for (const match of file.body.toString('utf8').matchAll(/\b(?:src|href)\s*=\s*["'](\/(?!\/)[^"']*)["']/gi)) {
       if (match[1] !== basePath && !match[1].startsWith(basePath + '/')) {
         throw new Error(`Root-absolute URL in ${file.path} points outside this preview. Configure the framework base path with BETTERVERCEL_BASE_PATH and rebuild; relative URLs also work.`);
+      }
+    }
+    if (routing === 'spa') {
+      for (const match of file.body.toString('utf8').matchAll(/\b(?:src|href)\s*=\s*["']([^"']+)["']/gi)) {
+        if (!/^(?:\/|#|[a-z][a-z0-9+.-]*:)/i.test(match[1])) {
+          throw new Error(`Relative URL in ${file.path} will break on SPA deep links. Configure the framework base with BETTERVERCEL_BASE_PATH and rebuild.`);
+        }
       }
     }
   }
@@ -125,6 +136,6 @@ export async function collectArtifacts(root, config) {
   await walk(output);
   artifacts.sort((a, b) => a.path.localeCompare(b.path, 'en'));
   // Reuse the server contract so malformed output fails before any deployment is created.
-  normalizeRequest({ projectId: config.projectId, framework: config.framework, files: artifacts }, 'local-validation');
+  normalizeRequest({ projectId: config.projectId, framework: config.framework, routing: config.routing, files: artifacts }, 'local-validation');
   return artifacts;
 }
