@@ -5,6 +5,7 @@ import { CloudFrontClient, CreateInvalidationCommand } from '@aws-sdk/client-clo
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { CACHE_CONTROL, prefix } from './domain.mjs';
 import { createHandler } from './handler.mjs';
+import { githubFromEnvironment } from './github-aws.mjs';
 
 export function createStore(client, projects, deployments) {
   const get = async (TableName, Key) => (await client.send(new GetCommand({ TableName, Key, ConsistentRead: true }))).Item;
@@ -122,10 +123,14 @@ export function createDelivery(client, distributionId) {
 
 let control;
 export async function handler(event) {
-  control ??= createHandler({
-    store: createStore(DynamoDBDocumentClient.from(new DynamoDBClient({})), process.env.PROJECTS_TABLE, process.env.DEPLOYMENTS_TABLE),
+  if (!control) {
+    const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+    const store = createStore(client, process.env.PROJECTS_TABLE, process.env.DEPLOYMENTS_TABLE);
+    control = createHandler({
+    store, github: githubFromEnvironment(client, store),
     objects: createObjects(new S3Client({}), process.env.ARTIFACTS_BUCKET), domain: process.env.PREVIEW_DOMAIN,
     delivery: createDelivery(new CloudFrontClient({}), process.env.DISTRIBUTION_ID),
   });
+  }
   return control(event);
 }

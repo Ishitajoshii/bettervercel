@@ -9,6 +9,7 @@ interface ControlPlaneStackProps extends StackProps {
   bucketName: string;
   previewDomain: string;
   distributionId: string;
+  github?: { clientId: string; secretArn: string; allowedUsers: string };
 }
 
 export class ControlPlaneStack extends Stack {
@@ -25,6 +26,12 @@ export class ControlPlaneStack extends Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       encryption: dynamodb.TableEncryption.AWS_MANAGED, removalPolicy: RemovalPolicy.RETAIN,
     });
+    const github = new dynamodb.Table(this, 'GitHubConnections', {
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      timeToLiveAttribute: 'expiresAt', billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      encryption: dynamodb.TableEncryption.AWS_MANAGED, removalPolicy: RemovalPolicy.RETAIN,
+    });
     const logGroup = new logs.LogGroup(this, 'ControlLogs', {
       retention: logs.RetentionDays.THREE_DAYS, removalPolicy: RemovalPolicy.DESTROY,
     });
@@ -37,10 +44,14 @@ export class ControlPlaneStack extends Stack {
       handler: 'index.handler', code: lambda.Code.fromAsset(fileURLToPath(new URL('../.build/control-api/', import.meta.url))),
       memorySize: 256, timeout: Duration.seconds(28), logGroup, role: executionRole,
       environment: { PROJECTS_TABLE: projects.tableName, DEPLOYMENTS_TABLE: deployments.tableName,
+        GITHUB_TABLE: github.tableName, GITHUB_CLIENT_ID: props.github?.clientId ?? '',
+        GITHUB_SECRET_ARN: props.github?.secretArn ?? '', GITHUB_ALLOWED_USERS: props.github?.allowedUsers ?? '',
         ARTIFACTS_BUCKET: props.bucketName, PREVIEW_DOMAIN: props.previewDomain, DISTRIBUTION_ID: props.distributionId },
     });
     control.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:GetItem', 'dynamodb:PutItem'], resources: [projects.tableArn] }));
     control.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query'], resources: [deployments.tableArn] }));
+    control.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem', 'dynamodb:Query'], resources: [github.tableArn] }));
+    if (props.github) control.addToRolePolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue'], resources: [props.github.secretArn] }));
     const bucketArn = `arn:${this.partition}:s3:::${props.bucketName}`;
     control.addToRolePolicy(new iam.PolicyStatement({ actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'], resources: [`${bucketArn}/deployments/p*/*/*`] }));
     control.addToRolePolicy(new iam.PolicyStatement({ actions: ['cloudfront:CreateInvalidation'],
@@ -52,11 +63,13 @@ export class ControlPlaneStack extends Stack {
       resources: [`${bucketArn}/deployments/p*/*/*`], conditions: { StringNotEquals: { 's3:if-none-match': '*' } } }));
     const api = new apigw.HttpApi(this, 'DeployApi', { createDefaultStage: false,
       corsPreflight: { allowOrigins: [`https://${props.previewDomain}`],
-        allowMethods: [apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.DELETE],
+        allowMethods: [apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.DELETE],
         allowHeaders: ['authorization', 'content-type'], maxAge: Duration.minutes(10) } });
     new apigw.HttpStage(this, 'ApiStage', { httpApi: api, stageName: '$default', autoDeploy: true,
       throttle: { rateLimit: 5, burstLimit: 10 } });
     const integration = new integrations.HttpLambdaIntegration('ControlIntegration', control);
+    control.addEnvironment('API_URL', api.apiEndpoint);
+    api.addRoutes({ path: '/v1/github/{proxy+}', methods: [apigw.HttpMethod.ANY], integration });
     api.addRoutes({ path: '/v1/projects', methods: [apigw.HttpMethod.POST], integration,
       authorizer: new authorizers.HttpIamAuthorizer() });
     for (const [path, method] of [

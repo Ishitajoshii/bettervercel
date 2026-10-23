@@ -1,11 +1,12 @@
 import { deploymentProject, HttpError, issueToken, normalizeRequest, prefix, projectId,
   requireValue, summary, UPLOAD_SECONDS, validProject, verifyToken } from './domain.mjs';
 
-export function createHandler({ store, objects, delivery, domain, now = () => Date.now() }) {
+export function createHandler({ store, objects, delivery, domain, github, now = () => Date.now() }) {
   async function authenticate(id, event) {
     requireValue(validProject(id), 'Invalid project ID.');
     const project = await store.getProject(id);
     const token = (event.headers?.authorization ?? '').replace(/^Bearer /, '');
+    if (token.startsWith('gs_') && github) return github.authenticate(project, event);
     requireValue(await verifyToken(token, project), 'Invalid project credentials.', 401);
     return project;
   }
@@ -25,6 +26,10 @@ export function createHandler({ store, objects, delivery, domain, now = () => Da
     if (raw) {
       try { body = JSON.parse(raw); } catch { throw new HttpError(400, 'Invalid JSON body.'); }
       requireValue(body && typeof body === 'object' && !Array.isArray(body), 'Expected JSON object.');
+    }
+    if (event.rawPath?.startsWith('/v1/github/')) {
+      requireValue(github, 'GitHub sign-in is not configured yet. See docs/github-import.md.', 503);
+      return github.execute(event, body);
     }
     if (route === 'POST /v1/projects') {
       requireValue(event.requestContext?.authorizer?.iam?.userArn, 'Operator AWS IAM authentication required.', 403);

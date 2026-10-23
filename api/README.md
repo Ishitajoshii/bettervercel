@@ -1,6 +1,8 @@
 # Deploy API
 
-The control plane uses an API Gateway HTTP API, one ARM64 Node.js 24 Lambda, two DynamoDB on-demand tables, and the existing private artifact bucket. Lambda is outside a VPC, has no provisioned concurrency, and writes only to its own log group (three-day retention). The HTTP API is throttled to 5 requests/second with burst 10. Throttles and budget alerts are not hard spending caps.
+The control plane uses an API Gateway HTTP API, one ARM64 Node.js 24 Lambda, three DynamoDB on-demand tables, and the existing private artifact bucket. The third table stores expiring GitHub sign-in/setup records and durable project ownership links. Lambda is outside a VPC, has no provisioned concurrency, and writes only to its own log group (three-day retention). The HTTP API is throttled to 5 requests/second with burst 10. Throttles and budget alerts are not hard spending caps.
+
+The optional [GitHub import flow](../docs/github-import.md) adds `/v1/github/*` endpoints for OAuth, repo/branch discovery, root detection, workflow setup, and build status. Its opaque session tokens can access only projects owned by the authenticated GitHub user. Existing project bearer tokens and operator IAM project creation remain available. GitHub OAuth client secrets are read from one explicitly permitted Secrets Manager ARN.
 
 ## Build and deploy
 

@@ -1,5 +1,7 @@
 # Better Vercel
 
+The dashboard supports GitHub sign-in, a repository/branch picker, automatic app-root detection, editable build settings, and GitHub Actions deployments. Enable it with the [one-time GitHub setup](docs/github-import.md). The existing CLI and project-token connection remain available.
+
 Milestone 1 serves a Vite build from a private S3 bucket through an HTTPS CloudFront URL. Milestone 2 adds an authenticated deployment API, DynamoDB metadata, scoped immutable uploads, and validated finalization. Milestone 3 adds the local CLI with `login`, `init`, `deploy`, `status`, and `logs`. Infrastructure is AWS CDK in TypeScript. See [the CLI guide](cli/README.md) to deploy a project and [the deploy API guide](api/README.md) for setup, endpoint contracts, verification, and teardown.
 
 Milestone 4 adds a static project/deployment dashboard, authenticated deletion with CloudFront cache removal, branch/PR metadata, a [copy-paste GitHub Actions workflow](examples/github-actions/deploy.yml), and a runnable Next.js static-export sample. See [framework setup and dashboard operations](docs/frameworks-and-actions.md). The dashboard uses operator-issued project tokens; it has no self-serve signup.

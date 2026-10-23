@@ -10,7 +10,37 @@
   <header><a class="brand" href="./"><span class="mark">▲</span> Better Vercel</a><span class="alpha">PRIVATE ALPHA</span></header>
   <main>
     <div class="intro"><div><p class="eyebrow">YOUR WORK, ON THE WEB</p><h1>Deployments</h1><p>Small projects. Immutable previews. Your AWS.</p></div><button id="add-project">Connect a project <span>+</span></button></div>
-    <section id="connect-panel" class="panel">
+    <section id="github-panel" class="panel import-panel">
+      <div class="section-title"><div><p class="eyebrow">FROM REPOSITORY TO PREVIEW</p><h2>Import a GitHub repository</h2></div><button id="github-logout" class="secondary" hidden>Disconnect GitHub</button></div>
+      <div id="github-welcome"><p>Connect your account, choose a repository, and deploy. We will find the app folder and suggest build settings for you.</p><button id="github-connect">Continue with GitHub</button><p id="github-setup" class="hint" role="status"></p></div>
+      <div id="github-browser" hidden>
+        <p id="github-account"></p>
+        <label>Find a repository<input id="repo-search" type="search" placeholder="Search repositories you have loaded" autocomplete="off"></label>
+        <div id="repo-list" class="repo-list" aria-live="polite"></div><button id="repo-more" class="secondary" hidden>Load more repositories</button>
+      </div>
+      <form id="import-form" hidden>
+        <div class="section-title"><div><h3 id="import-repository"></h3><p>Review your deployment settings</p></div><button id="repo-back" type="button" class="secondary">Change repository</button></div>
+        <div class="import-grid">
+          <label>Branch<select id="import-branch" required></select></label>
+          <label>Detected app folder<select id="import-candidate" required></select></label>
+        </div>
+        <button id="branch-more" type="button" class="secondary" hidden>Load more branches</button>
+        <p id="detection-status" role="status" aria-live="polite"></p>
+        <div class="import-grid">
+          <label>Root directory<input id="import-root" value="." required autocomplete="off"><span class="hint">The folder containing your app, such as apps/web.</span></label>
+          <label>Framework<select id="import-framework"><option value="vite">Vite</option><option value="astro">Astro</option><option value="next-static">Next.js static export</option><option value="static">Static HTML / other</option></select></label>
+          <label>Install command<input id="import-install" autocomplete="off" placeholder="npm ci"></label>
+          <label>Build command<input id="import-build" autocomplete="off" placeholder="npm run build"></label>
+          <label>Output directory<input id="import-output" required value="dist" autocomplete="off"></label>
+          <label>Routing<select id="import-routing"><option value="static">Static pages</option><option value="spa">Single-page app</option></select></label>
+        </div>
+        <p class="hint">Vite and Astro previews get their base path automatically for standard build commands. Next.js uses static export; server features are not supported. Custom commands can use BETTERVERCEL_BASE_PATH.</p>
+        <label class="workflow-consent"><input id="import-consent" type="checkbox" required><span>Add a Better Vercel workflow and runner on this repository's default branch, and save its deployment token as a GitHub Actions secret. Builds use GitHub Actions minutes. Existing workflows are preserved.</span></label>
+        <button id="import-deploy" type="submit" disabled>Set up GitHub Actions &amp; deploy</button>
+      </form>
+      <p id="github-notice" role="status" aria-live="polite"></p>
+    </section>
+    <details class="manual-connect"><summary>Advanced: connect with a project token</summary><section id="connect-panel" class="panel">
       <h2>Connect your project</h2><p>Use the project ID and deploy token issued by your operator. Tokens stay in this tab’s memory and are cleared on refresh.</p>
       <form id="connect-form">
         <label>API endpoint<input id="api" type="url" placeholder="https://…execute-api.ap-south-1.amazonaws.com" required autocomplete="off"></label>
@@ -18,11 +48,12 @@
         <label>Deploy token<input id="token" type="password" placeholder="bv_…" required autocomplete="off"></label>
         <button type="submit">Connect project</button>
       </form>
-    </section>
+    </section></details>
     <p id="notice" role="status" aria-live="polite"></p>
-    <div class="workspace"><aside><h2>Projects <span id="project-count">0</span></h2><nav id="projects" aria-label="Connected projects"></nav><p class="aside-note">Operator access only.<br>No account signup required.</p></aside>
+    <div class="workspace"><aside><h2>Projects <span id="project-count">0</span></h2><nav id="projects" aria-label="Connected projects"></nav><p class="aside-note">Private alpha.<br>GitHub sessions stay in this tab.</p></aside>
       <section class="deployments"><div class="section-title"><div><h2 id="project-name">Your next launch starts here</h2><p id="project-id">Connect a project to see its deployments.</p></div><div class="actions"><button id="refresh" class="secondary" hidden>Refresh</button><button id="disconnect" class="secondary" hidden>Disconnect</button></div></div>
-        <div id="list"><div class="empty"><span class="empty-symbol">↗</span><h3>A home for every deployment</h3><p>See build status, open a preview, and manage your releases in one place.</p><code>bettervercel deploy</code></div></div>
+        <div id="build-status" hidden aria-live="polite"></div>
+        <div id="list"><div class="empty"><span class="empty-symbol">↗</span><h3>A home for every deployment</h3><p>Import a repository above to build your first preview.</p></div></div>
         <button id="more" class="secondary" hidden>Load more</button>
       </section>
     </div>

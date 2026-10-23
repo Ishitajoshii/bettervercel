@@ -10,8 +10,8 @@ const template = Template.fromStack(new ControlPlaneStack(new App(), 'ControlTes
   bucketName: 'test-artifacts', previewDomain: 'example.cloudfront.net', distributionId: 'E123456789',
 }));
 
-test('control plane is serverless with two on-demand encrypted retained tables and bounded logs', () => {
-  template.resourceCountIs('AWS::DynamoDB::Table', 2);
+test('control plane is serverless with three on-demand encrypted retained tables and bounded logs', () => {
+  template.resourceCountIs('AWS::DynamoDB::Table', 3);
   for (const table of Object.values(template.findResources('AWS::DynamoDB::Table'))) {
     assert.equal(table.Properties.BillingMode, 'PAY_PER_REQUEST');
     assert.equal(table.Properties.SSESpecification.SSEEnabled, true);
@@ -27,7 +27,7 @@ test('control plane is serverless with two on-demand encrypted retained tables a
 });
 
 test('project creation requires IAM while deploy routes use application token checks; stage is throttled', () => {
-  template.resourceCountIs('AWS::ApiGatewayV2::Route', 7);
+  template.resourceCountIs('AWS::ApiGatewayV2::Route', 8);
   template.hasResourceProperties('AWS::ApiGatewayV2::Route', { RouteKey: 'POST /v1/projects', AuthorizationType: 'AWS_IAM' });
   template.hasResourceProperties('AWS::ApiGatewayV2::Stage', {
     DefaultRouteSettings: { ThrottlingBurstLimit: 10, ThrottlingRateLimit: 5 },
@@ -66,6 +66,7 @@ test('release gate: every execution-role permission stays within its exact servi
   const tablePermissions = new Map([
     [resourceId('AWS::DynamoDB::Table', 'Projects'), ['dynamodb:GetItem', 'dynamodb:PutItem']],
     [resourceId('AWS::DynamoDB::Table', 'Deployments'), ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query']],
+    [resourceId('AWS::DynamoDB::Table', 'GitHubConnections'), ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem', 'dynamodb:Query']],
   ]);
   const statements = Object.values(template.findResources('AWS::IAM::Policy')).flatMap(p => p.Properties.PolicyDocument.Statement);
   for (const statement of statements.filter(s => s.Effect === 'Allow')) {
@@ -92,4 +93,22 @@ test('release gate: every execution-role permission stays within its exact servi
     assert.deepEqual(role.Properties.AssumeRolePolicyDocument.Statement,
       [{ Effect: 'Allow', Action: 'sts:AssumeRole', Principal: { Service: 'lambda.amazonaws.com' } }]);
   }
+});
+
+test('GitHub credentials are server-side, exact-secret scoped, and sessions have TTL', () => {
+  const secretArn = 'arn:aws:secretsmanager:ap-south-1:123456789012:secret:bettervercel/github-abcdef';
+  const configured = Template.fromStack(new ControlPlaneStack(new App(), 'GitHubTest', {
+    env: { account: '123456789012', region: 'ap-south-1' }, bucketName: 'test-artifacts',
+    previewDomain: 'example.cloudfront.net', distributionId: 'E123456789',
+    github: { clientId: 'client-id', secretArn, allowedUsers: 'owner' },
+  }));
+  configured.hasResourceProperties('AWS::DynamoDB::Table', { TimeToLiveSpecification: { AttributeName: 'expiresAt', Enabled: true } });
+  configured.hasResourceProperties('AWS::ApiGatewayV2::Api', { CorsConfiguration: {
+    AllowOrigins: ['https://example.cloudfront.net'], AllowMethods: ['GET', 'POST', 'DELETE'],
+  } });
+  const statements = Object.values(configured.findResources('AWS::IAM::Policy')).flatMap(p => p.Properties.PolicyDocument.Statement);
+  assert.deepEqual(statements.filter(s => JSON.stringify(s.Action).includes('secretsmanager:')), [
+    { Effect: 'Allow', Action: 'secretsmanager:GetSecretValue', Resource: secretArn },
+  ]);
+  configured.resourceCountIs('AWS::CodeBuild::Project', 0);
 });

@@ -26,10 +26,21 @@ if (process.env.BETTERVERCEL_CONTROL_PLANE === '1') {
       !previewDomain || !/^[a-z0-9]+\.cloudfront\.net$/.test(previewDomain) || !distributionId || !/^[A-Z0-9]+$/.test(distributionId)) {
     throw new Error('Set BETTERVERCEL_BUCKET, BETTERVERCEL_PREVIEW_DOMAIN and BETTERVERCEL_DISTRIBUTION_ID from the hosting stack outputs.');
   }
+  const githubClientId = process.env.BETTERVERCEL_GITHUB_CLIENT_ID;
+  const githubSecretArn = process.env.BETTERVERCEL_GITHUB_SECRET_ARN;
+  const githubAllowedUsers = process.env.BETTERVERCEL_GITHUB_ALLOWED_USERS;
+  if ([githubClientId, githubSecretArn, githubAllowedUsers].some(Boolean) &&
+    !(githubClientId && githubSecretArn && githubAllowedUsers)) {
+    throw new Error('Set all three BETTERVERCEL_GITHUB_CLIENT_ID, BETTERVERCEL_GITHUB_SECRET_ARN and BETTERVERCEL_GITHUB_ALLOWED_USERS values.');
+  }
+  if (githubSecretArn && !/^arn:aws:secretsmanager:[a-z0-9-]+:\d{12}:secret:[A-Za-z0-9/_+=.@-]+$/.test(githubSecretArn)) {
+    throw new Error('BETTERVERCEL_GITHUB_SECRET_ARN must be an exact Secrets Manager secret ARN.');
+  }
   const control = new ControlPlaneStack(app, 'BetterVercelControlStack', {
     env: { account: process.env.CDK_DEFAULT_ACCOUNT,
       region: process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? 'ap-south-1' },
     bucketName, previewDomain, distributionId,
+    github: githubClientId ? { clientId: githubClientId, secretArn: githubSecretArn!, allowedUsers: githubAllowedUsers! } : undefined,
     analyticsReporting: false,
     description: 'Better Vercel milestone 2: deployment API and project metadata',
   });
