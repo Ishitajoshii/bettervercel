@@ -1,0 +1,35 @@
+name: Deploy static preview
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: bettervercel-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+jobs:
+  deploy:
+    # Only trusted repository contributors receive the deploy token. Forks and Dependabot are skipped.
+    if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      # This private alpha CLI is not published to npm. Vendor api/domain.mjs and the cli/ directory
+      # from a reviewed Better Vercel revision into tools/bettervercel/ in your application repository.
+      - run: npm ci
+      - name: Build and deploy
+        env:
+          BETTERVERCEL_TOKEN: ${{ secrets.BETTERVERCEL_TOKEN }}
+          BETTERVERCEL_BRANCH: ${{ github.head_ref || github.ref_name }}
+          BETTERVERCEL_PR_NUMBER: ${{ github.event.pull_request.number }}
+          DEPLOY_KEY: gha-${{ github.run_id }}-${{ github.run_attempt }}
+        run: node tools/bettervercel/cli/bin.mjs deploy . --idempotency-key "$DEPLOY_KEY"
