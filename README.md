@@ -1,6 +1,6 @@
 # Better Vercel
 
-Milestone 1 serves a Vite build from a private S3 bucket through an HTTPS CloudFront URL. Milestone 2 adds an authenticated deployment API, DynamoDB metadata, scoped immutable uploads, and validated finalization. Infrastructure is AWS CDK in TypeScript. See [the deploy API guide](api/README.md) for setup, endpoint contracts, verification, and teardown.
+Milestone 1 serves a Vite build from a private S3 bucket through an HTTPS CloudFront URL. Milestone 2 adds an authenticated deployment API, DynamoDB metadata, scoped immutable uploads, and validated finalization. Milestone 3 adds the local CLI with `login`, `init`, `deploy`, `status`, and `logs`. Infrastructure is AWS CDK in TypeScript. See [the CLI guide](cli/README.md) to deploy a project and [the deploy API guide](api/README.md) for setup, endpoint contracts, verification, and teardown.
 
 ## Live milestone 1
 
@@ -10,7 +10,7 @@ Deployed and verified on October 23, 2026 in `ap-south-1`:
 
 CloudFormation reports `UPDATE_COMPLETE` after the routing audit. Live checks passed for HTTPS redirects, HTML/JS/CSS contents and MIME types, CloudFront cache hits, S3 encryption/public-access blocks, and blocked anonymous S3 reads. A separate disposable preview was uploaded, cached, deleted, and invalidated; its URL then returned 403. The main preview remains available and its artifacts expire after seven days.
 
-The audit reran the live content, HTTPS, caching, and S3 privacy checks successfully. All 30 local tests pass across both milestones, including storage adapters, token isolation, signed upload constraints, concurrent finalization, and infrastructure. The $5 whole-account budget is active with $1/$3/$5 email notifications and excludes credits/refunds. This verifies alert configuration, not delivery of an email. The browser click test remains manual because both browser automation helpers failed during startup.
+The audit reran the live content, HTTPS, caching, and S3 privacy checks successfully. The original 30 local tests passed across both milestones, including storage adapters, token isolation, signed upload constraints, concurrent finalization, and infrastructure. The $5 whole-account budget is active with $1/$3/$5 email notifications and excludes credits/refunds. This verifies alert configuration, not delivery of an email. The browser click test remains manual because both browser automation helpers failed during startup.
 
 ## Live milestone 2
 

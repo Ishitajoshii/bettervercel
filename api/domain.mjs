@@ -39,6 +39,9 @@ const types = {
   woff: 'font/woff', woff2: 'font/woff2', ttf: 'font/ttf', wasm: 'application/wasm',
   pdf: 'application/pdf', map: 'application/json',
 };
+export function artifactContentType(path) {
+  return types[path.split('.').at(-1).toLowerCase()];
+}
 export function normalizeRequest(input, idempotencyKey) {
   requireValue(typeof idempotencyKey === 'string' && /^[A-Za-z0-9_-]{8,128}$/.test(idempotencyKey),
     'Idempotency-Key must contain 8–128 letters, digits, underscores, or hyphens.');
@@ -57,7 +60,7 @@ export function normalizeRequest(input, idempotencyKey) {
     seen.add(file.path);
     requireValue(Number.isSafeInteger(file.size) && file.size >= 0 && file.size <= MAX_BYTES, 'Invalid file size.');
     totalBytes += file.size;
-    const contentType = types[file.path.split('.').at(-1).toLowerCase()];
+    const contentType = artifactContentType(file.path);
     requireValue(contentType && file.contentType === contentType, 'Unsupported extension or mismatched MIME type.');
     requireValue(typeof file.sha256 === 'string' && /^[a-f0-9]{64}$/.test(file.sha256), 'Expected SHA-256 hex checksum.');
     return { path: file.path, size: file.size, contentType, sha256: file.sha256 };

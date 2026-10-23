@@ -3,10 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "bettervercel": "cli/bin.mjs"
+  },
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
+    "cli": "node cli/bin.mjs",
     "check": "tsc --noEmit && npm run build:api && node --test tests/*.test.mjs",
     "test": "npm run build:api && node --test tests/*.test.mjs",
     "build:api": "node scripts/build-api.mjs",

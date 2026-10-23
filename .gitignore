@@ -22,6 +22,7 @@ coverage/
 .env.*
 !.env.example
 .aws/
+.bettervercel/
 
 # Logs and operating-system files
 *.log
