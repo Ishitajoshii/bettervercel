@@ -98,6 +98,15 @@ test('unconfigured OAuth gives actionable setup status; logout invalidates serve
   assert.equal((await f.request('/projects')).status, 401);
 });
 
+test('GitHub proxy accepts unauthenticated browser preflight without requiring setup or session', async () => {
+  for (const configured of [true, false]) {
+    const f = fixture({ configured });
+    const result = await f.request('/authorize', undefined, 'OPTIONS', '');
+    assert.equal(result.status, 200); assert.deepEqual(result.body, {});
+    assert.equal(f.calls.length, 0);
+  }
+});
+
 test('GitHub session cannot access another user or operator project', async () => {
   const f = fixture();
   await assert.rejects(f.github.authenticate({ githubUserId: '2' }, { headers: { authorization: `Bearer ${token}` } }), /another account/);

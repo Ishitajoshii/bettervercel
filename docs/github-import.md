@@ -10,7 +10,7 @@ Builds run in GitHub Actions using the existing deployment API. No AWS build ser
    - Application name: `Better Vercel`.
    - Homepage URL: `https://<DomainName>/dashboard/`.
    - Authorization callback URL: **exactly** `https://<DomainName>/dashboard/` (including the trailing slash).
-2. Generate the OAuth client secret. Store its raw value as a **plaintext secret** in AWS Secrets Manager in the control API's region using the default Secrets Manager encryption key. Do not use a JSON key/value wrapper. Do not paste the secret into chat, source files, environment variables, or shell history. The Lambda retrieves it by ARN; only the ARN is in the deployment configuration.
+2. Generate the OAuth client secret. Store it in AWS Secrets Manager in the control API's region using the default Secrets Manager encryption key. Use **Key/value pairs** with key `client_secret` and the GitHub client secret as its value, or use **Plaintext** with just the raw secret. Both formats are supported. Do not paste the secret into chat, source files, environment variables, or shell history. The Lambda retrieves it by ARN; only the ARN is in the deployment configuration.
 3. Set these non-secret values in the deployment shell:
 
    ```powershell
@@ -20,7 +20,7 @@ Builds run in GitHub Actions using the existing deployment API. No AWS build ser
    $env:BETTERVERCEL_GITHUB_ALLOWED_USERS = '<your GitHub login>'
    ```
 
-   Multiple private-alpha logins may be comma-separated. Keep these values set for subsequent control-stack deployments; omitting them disables sign-in. The app fails closed if only some values are set. There is no public signup.
+   Multiple private-alpha logins may be comma-separated. To keep configuration across deployments, save the non-secret values in ignored `.bettervercel/operator.json` as `{"github":{"clientId":"...","secretArn":"...","allowedUsers":"..."}}`. The control-stack scripts load this file; explicit environment values take precedence. Without the file, keep all three environment values set for subsequent deployments. The app fails closed if only some values are set. There is no public signup.
 4. Run `npm run check`, `npm run synth:api`, and `npm run diff:api`. Expect one additional retained, encrypted DynamoDB table with TTL, a GitHub API route, POST in the existing dashboard CORS policy, and access to the exact OAuth secret ARN. Existing artifact permissions and operator IAM authentication are preserved.
 5. Deploy with `npm run deploy:api`, then upload the dashboard with `npm run upload:dashboard`. Hosting infrastructure does not need a change. GitHub sign-in remains disabled with a setup message until all three configuration values are supplied.
 6. Open the dashboard and choose **Continue with GitHub**. Authorize repository and workflow access, including organization approval when required. Select a test repository you administer, review its settings, acknowledge the workflow setup, and deploy. Use **View build logs on GitHub** while the preview builds.

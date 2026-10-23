@@ -22,6 +22,7 @@
     "verify:spa": "node scripts/verify-spa.mjs",
     "upload:dashboard": "node scripts/upload-dashboard.mjs",
     "verify:dashboard": "node scripts/verify-dashboard.mjs",
+    "verify:github": "node scripts/verify-github.mjs",
     "create:project": "node scripts/create-project.mjs",
     "destroy:api": "node scripts/control-infra.mjs destroy",
     "synth": "cdk synth",

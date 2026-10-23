@@ -4,6 +4,21 @@ import sodium from 'libsodium-wrappers';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createGitHub } from './github.mjs';
+import { HttpError } from './domain.mjs';
+
+export function parseGitHubClientSecret(value) {
+  const invalid = () => new HttpError(503, 'GitHub OAuth secret must contain a nonempty plaintext value or a client_secret key/value pair.');
+  if (typeof value !== 'string' || !value.trim()) throw invalid();
+  let secret = value.trim();
+  if (/^[{\["]/.test(secret)) {
+    let parsed;
+    try { parsed = JSON.parse(secret); } catch { throw invalid(); }
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw invalid();
+    secret = parsed.client_secret;
+  }
+  if (typeof secret !== 'string' || !secret.trim() || /\s/.test(secret.trim())) throw invalid();
+  return secret.trim();
+}
 
 export function createGitHubData(client, TableName) {
   const conditional = async command => {
@@ -38,7 +53,7 @@ export function githubFromEnvironment(client, store) {
     config: { clientId: process.env.GITHUB_CLIENT_ID, secretArn: process.env.GITHUB_SECRET_ARN,
       allowedUsers: (process.env.GITHUB_ALLOWED_USERS ?? '').toLowerCase().split(',').map(value => value.trim()).filter(Boolean),
       redirectUri: `https://${process.env.PREVIEW_DOMAIN}/dashboard/`, apiUrl: process.env.API_URL },
-    getSecret: async () => secret ??= (await secretClient.send(new GetSecretValueCommand({ SecretId: process.env.GITHUB_SECRET_ARN }))).SecretString,
+    getSecret: async () => secret ??= parseGitHubClientSecret((await secretClient.send(new GetSecretValueCommand({ SecretId: process.env.GITHUB_SECRET_ARN }))).SecretString),
     seal: async (value, publicKey) => {
       await sodium.ready;
       return sodium.to_base64(sodium.crypto_box_seal(sodium.from_string(value), sodium.from_base64(publicKey, sodium.base64_variants.ORIGINAL)), sodium.base64_variants.ORIGINAL);

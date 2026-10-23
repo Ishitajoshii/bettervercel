@@ -114,6 +114,8 @@ export function createGitHub({ data, store, config, getSecret, seal, runner, fet
   async function execute(event, body) {
     const path = event.rawPath ?? '';
     const method = event.requestContext?.http?.method ?? event.routeKey.split(' ')[0];
+    // The ANY proxy receives browser preflights; API Gateway adds the configured CORS headers.
+    if (method === 'OPTIONS') return [200, {}];
     if (path === '/v1/github/config' && method === 'GET') return [200, { enabled,
       message: enabled ? null : 'GitHub sign-in needs one-time operator setup. See docs/github-import.md.' }];
     requireValue(enabled, 'GitHub sign-in is not configured yet. Complete the one-time setup in docs/github-import.md.', 503);

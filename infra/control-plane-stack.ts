@@ -69,7 +69,6 @@ export class ControlPlaneStack extends Stack {
       throttle: { rateLimit: 5, burstLimit: 10 } });
     const integration = new integrations.HttpLambdaIntegration('ControlIntegration', control);
     control.addEnvironment('API_URL', api.apiEndpoint);
-    api.addRoutes({ path: '/v1/github/{proxy+}', methods: [apigw.HttpMethod.ANY], integration });
     api.addRoutes({ path: '/v1/projects', methods: [apigw.HttpMethod.POST], integration,
       authorizer: new authorizers.HttpIamAuthorizer() });
     for (const [path, method] of [
@@ -80,6 +79,8 @@ export class ControlPlaneStack extends Stack {
       ['/v1/projects/{projectId}', apigw.HttpMethod.GET],
       ['/v1/projects/{projectId}/deployments', apigw.HttpMethod.GET],
     ] as const) api.addRoutes({ path, methods: [method], integration });
+    // Bind existing routes first so adding GitHub does not change the integration logical ID.
+    api.addRoutes({ path: '/v1/github/{proxy+}', methods: [apigw.HttpMethod.ANY], integration });
     new CfnOutput(this, 'ApiUrl', { value: api.apiEndpoint });
     new CfnOutput(this, 'ProjectsTableName', { value: projects.tableName });
     new CfnOutput(this, 'DeploymentsTableName', { value: deployments.tableName });
