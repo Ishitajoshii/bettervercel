@@ -105,7 +105,7 @@ Do not copy code until its license is reviewed. Start by reproducing lifecycle b
 ### Milestone 0 — cost safety
 
 - [x] Confirm account plan and Free Tier usage via AWS CLI (active Free plan; checked October 23, 2026).
-- [ ] Enable root MFA; use an admin IAM identity for setup. Root MFA verified enabled October 24; non-root setup identity remains open.
+- [x] Enable root MFA; confirm setup identity. Root MFA verified enabled October 24. Owner explicitly prefers the existing root-backed `bettervercel` profile for this demo; the original non-root admin setup requirement is deferred for this demo and does not block rollout.
 - [x] Create monitoring-only $5 monthly AWS Budget with alerts above $1, $3, and $5, excluding credits/refunds.
 - [x] Enable cost anomaly detection; set log retention to 3 days. Existing monitor/email subscription and live three-day logs verified October 24; lowering the default anomaly threshold is tracked in `TODO.md`.
 - [x] Select `ap-south-1` and document the teardown procedure in README.
@@ -216,8 +216,8 @@ This review does not claim a hosted GitHub Actions run or browser hydration/clic
 ### Milestone 5 — release gate
 
 - [x] Test two projects and prove tokens cannot cross-write.
-- [ ] Test empty artifact, interrupted upload, duplicate finalize, large file, and SPA fallback.
-- [ ] Review IAM: no wildcard write/read beyond required prefixes.
+- [x] Test empty artifact, interrupted upload, duplicate finalize, large file, and SPA fallback.
+- [x] Review IAM: no wildcard write/read beyond required prefixes.
 - [ ] Verify lifecycle policies, logs, Free Tier, budget alert email, and teardown procedure.
 - [ ] Deploy 2–3 own sites before letting anyone else in.
 
@@ -242,6 +242,16 @@ The complete remaining-work checklist, including product decisions and deferred 
 - Live AWS APIs confirm root MFA is enabled, artifact expiry is seven days, incomplete multipart cleanup is one day and the control log group retains three days. Retention is complete in the checklist. Evidence is in ignored `.build/operations-audit-20261024.json`.
 - An existing SERVICE anomaly monitor and DAILY email subscription are active; its subscriber is confirmed. The current threshold requires both $100 and 40% impact, so budget-appropriate threshold adjustment remains open. The $5 budget is healthy, excludes credits/refunds and has actual-cost thresholds at $1/$3/$5. This does not prove receipt of a budget alert email. Evidence: ignored `.build/notifications-audit-20261024.json`.
 - Free plan is ACTIVE. A single cached Cost Explorer query for October 1–23, excluding credits/refunds, reports $0; all days are estimated and contain no service groups. This is not mature project-attributed billing data or a completed low-traffic month. Evidence: ignored `.build/cost-audit-20261024.json`.
+
+### Milestone 5 demo rollout — October 24, 2026 (IST)
+
+The owner confirmed the root-backed `bettervercel` profile is the intended setup identity for this demo, overriding the earlier non-root rollout prerequisite. No new credentials or IAM-user changes were required; root MFA remains enabled.
+
+- Deployed `BetterVercelStaticStack` (restricted bucket policy and SPA router) and `BetterVercelControlStack` (API code). The reviewed diffs contained no new services or resource replacements; the bucket, distribution, budget and tables were preserved.
+- Live bucket-policy inspection confirms CloudFront `GetObject` is limited to `deployments/*` and `dashboard/*`, with the exact distribution condition and TLS deny intact. Dashboard contents, no-store/security headers, API config, the original Vite preview and existing nested Next preview passed HTTP checks. Evidence: ignored `.build/rollout-policy-results.json` and `.build/rollout-http-results.json`.
+- `npm run verify:spa` passed for real SPA and static Vite deployments: exact artifact bytes/MIME, nested routes with queries, missing JS/CSS/JSON errors, namespace isolation and unknown deployment denial. Ready time after build was 1,983 ms for SPA and 1,240 ms for static. Evidence: ignored `.build/spa-smoke-1792787072799/results.json` and `verification.json`. [SPA preview](https://d34mbpew2lb7ue.cloudfront.net/d/p5a74c182efce3b77-01fe76ea1ff6a268e8eb45e479210616/_spa/).
+- The full live API security smoke test passed again after deployment, including both-direction project/token/signed-prefix isolation, empty/large artifacts, interrupted upload recovery, checksums, immutable uploads and concurrent/duplicate finalization. Evidence: ignored `.build/release-gate-api-1792787103467.json`.
+- The local suite remains at 62 passing tests. Browser interaction acceptance, hosted GitHub Actions, budget-appropriate anomaly thresholds, email receipt, teardown rehearsal, own-site acceptance and mature/month-long billing evidence remain tracked in [TODO.md](../TODO.md).
 
 ## Later upgrade path
 

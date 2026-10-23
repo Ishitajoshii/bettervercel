@@ -70,7 +70,7 @@ npm run verify:sample -- --id smoke-001
 
 Open the printed `https://<distribution>.cloudfront.net/d/smoke-001/` URL and click the button to check JavaScript in the browser. Vite uses relative asset URLs so the build works under the preview path. The automated verification checks HTTPS redirects, JS/CSS/HTML bytes and MIME types, cache headers and a repeat cache hit, private S3 access, missing-file errors, and blocked internal storage paths.
 
-The router supports directory indexes (`/docs/` → `docs/index.html`). The source also supports opt-in SPA history routing after the hosting/API updates; see [SPA setup](docs/frameworks-and-actions.md#opt-in-spa-history-routing) and the rollout status in [TODO.md](TODO.md). Unknown S3 objects can return 403 because public callers cannot list the bucket; this is an expected missing-file response for this proof.
+The router supports directory indexes (`/docs/` → `docs/index.html`) and opt-in SPA history routing, now deployed and live-verified. See [SPA setup](docs/frameworks-and-actions.md#opt-in-spa-history-routing) and the remaining work in [TODO.md](TODO.md). Unknown S3 objects can return 403 because public callers cannot list the bucket; this is an expected missing-file response for this proof.
 
 All `/d/` previews are public and share one browser origin. Use your own trusted sample builds during this milestone. Per-project browser-origin isolation belongs in the hosting design before accepting unrelated users' pages.
 

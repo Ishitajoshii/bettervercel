@@ -16,7 +16,7 @@ Static routing supports `/about/` → `about/index.html`; it does not map `/abou
 
 ### Opt-in SPA history routing
 
-The source now supports `bettervercel init ... --routing spa`, or `"routing": "spa"` in `bettervercel.json`. Deploy the updated hosting router and control API before using it; live rollout is tracked in [TODO.md](../TODO.md). Omitted routing or `"static"` preserves the static-export behavior. Next static export must use static routing.
+Use `bettervercel init ... --routing spa`, or `"routing": "spa"` in `bettervercel.json`. The demo hosting router and control API are deployed and live-verified; see [TODO.md](../TODO.md). On a separate installation, update both stacks before enabling SPA mode. Omitted routing or `"static"` preserves the static-export behavior. Next static export must use static routing.
 
 The CLI supplies the complete SPA base path to the build. For Vite, set `base: process.env.BETTERVERCEL_BASE_PATH + '/'` and configure the client router's basename from the same value (Vite exposes `import.meta.env.BASE_URL`). Relative HTML asset URLs such as `./assets/app.js` break at nested URLs and are rejected for SPA output. Use the absolute preview base for assets and links; the relative settings in the framework table apply to static routing only. Hash links and external URLs are permitted.
 
