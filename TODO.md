@@ -32,7 +32,7 @@ Checked items require recorded evidence; an implementation alone does not close 
 - [ ] **L1 — Custom domains** using user-owned DNS domains.
 - [ ] **L2 — Optional quota-limited CodeBuild builds** while preserving local/GitHub builds.
 - [ ] **L3 — Experimental Next.js SSR on Lambda** with explicit runtime/resource limits.
-- [ ] **L4 — Activate and accept GitHub OAuth/import.** Local implementation now includes sign-in, repository/branch selection, root detection, editable build settings, and GitHub Actions setup. Complete the [OAuth setup](docs/github-import.md), deploy, and verify an actual GitHub authorization and Actions run. GitLab remains deferred.
+- [ ] **L4 — Accept authenticated GitHub import.** OAuth configuration, API, and dashboard are deployed for the owner's allowed GitHub account. Live endpoint, preflight, PKCE, secret retrieval, and asset checks pass; evidence `.build/github-rollout-results.json`. Still verify actual user authorization, repository selection, and an Actions deployment. GitLab remains deferred.
 - [ ] **L5 — Teams, billing and public signup.**
 - [ ] **L6 — Additional framework support.**
 - [ ] **L7 — Firecracker/EC2 execution**, only when paid usage justifies its cost and operation.

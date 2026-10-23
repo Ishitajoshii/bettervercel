@@ -43,3 +43,5 @@ The OAuth flow follows [GitHub's authorization-code and PKCE guidance](https://d
 ## Validation
 
 `npm run check` covers OAuth expiry/replay/PKCE, ownership checks, logout, repository detection, workflow setup retries and permissions, exact IAM scope, existing deployments, and real builds of plain HTML and a nested Vite app using the bundled runner. Live GitHub authorization and Actions execution require the operator configuration above and are separate acceptance checks.
+
+After rollout, run `npm run verify:github` to check the enabled sign-in endpoint, browser preflight, PKCE redirect, secret retrieval through an intentionally invalid authorization-code exchange, and published dashboard assets. It writes credential-free results to `.build/github-rollout-results.json`. Successful checks do not replace the user's GitHub authorization or an actual repository build.
