@@ -2,6 +2,12 @@
 function handler(event) {
   var request = event.request;
   var uri = request.uri;
+  if (uri === '/' || uri === '/dashboard') return { statusCode: 308, statusDescription: 'Permanent Redirect',
+    headers: { location: { value: '/dashboard/' } } };
+  if (/^\/dashboard\/(?:index\.html|app\.js|style\.css|config\.json)?$/.test(uri)) {
+    if (uri === '/dashboard/') request.uri += 'index.html';
+    return request;
+  }
   var match = /^\/d\/([a-z0-9][a-z0-9-]{0,62})(\/.*)?$/.exec(uri);
   if (!match || /%2e|%2f|%5c|\\|(?:^|\/)\.{1,2}(?:\/|$)/i.test(uri)) {
     return { statusCode: 404, statusDescription: 'Not Found' };

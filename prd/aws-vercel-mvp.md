@@ -139,14 +139,37 @@ Audit and live verification on October 23, 2026:
 - Browser click verification remains manual: both browser automation helpers failed at startup. All HTTP/content and API checks ran against real deployed resources.
 - See [API contracts, security boundaries, schema and teardown](../api/README.md). Public previews share an origin; known uploaded paths are accessible before finalization. SPA fallback, production aliases, deletion APIs, durable hosting retention, and the CLI remain later work.
 
+### Milestone 2 follow-up review
+
+Reviewed all seven tasks against the implementation and reran the original 30 local tests before starting the CLI. This review did not repeat the earlier live AWS verification.
+
+| Task | Evidence | Result |
+| --- | --- | --- |
+| Projects/Deployments schema | `infra/control-plane-stack.ts`, `api/aws.mjs`; schema and adapter tests | Implemented; encrypted on-demand tables, project keys, retained metadata |
+| HTTP API and Lambda | Five routes, IAM project creation, application token checks, throttled stage; infrastructure tests | Implemented |
+| Create/finalize/get/list endpoints | `api/handler.mjs`; endpoint, retry, and summary tests | Implemented |
+| One-time tokens and salted hashes | `issueToken`/`verifyToken`; token-storage and invalid-token tests | Implemented |
+| Short-lived scoped upload URLs | `api/aws.mjs`; real presigner and prefix-isolation tests | Implemented; checksum, size, MIME, cache and create-only headers signed |
+| Limits, idempotency, transitions | `normalizeRequest`, conditional DynamoDB operations, deadline checks; boundary/race tests | Implemented; 500 files, 25 MiB, 220 KB request body |
+| Security and concurrency tests | Token isolation, malformed/missing objects, immutable writes, simultaneous create/finalize | All original 30 tests passed |
+
+Existing limitations remain explicit: public previews share an origin, known uploads are accessible before finalization, artifacts expire after seven days, and SPA fallback is deferred. None of those deferred features was marked complete by this review.
+
 ### Milestone 3 — CLI
 
-- [ ] Create `login`, `init`, `deploy`, `status`, and `logs` commands.
-- [ ] Detect Vite, Astro, React static output, and Next static export; otherwise require explicit output directory.
-- [ ] Run local build only from explicit project configuration.
-- [ ] Build file manifest with relative path, type, cache-control, and SHA-256.
-- [ ] Upload with a small concurrency limit and finalize only if every upload succeeded.
-- [ ] Print preview URL, deployment ID, and useful failure remediation.
+- [x] Create `login`, `init`, `deploy`, `status`, and `logs` commands.
+- [x] Detect Vite, Astro, React static output, and Next static export; otherwise require explicit output directory.
+- [x] Run local build only from explicit project configuration.
+- [x] Build file manifest with relative path, type, cache-control, and SHA-256.
+- [x] Upload with a small concurrency limit and finalize only if every upload succeeded.
+- [x] Print preview URL, deployment ID, and useful failure remediation.
+
+Local implementation and verification:
+
+- Added the package's `bettervercel` executable and `npm run cli -- ...`; see [the CLI guide](../cli/README.md).
+- Configuration-only init, verified project-token login, explicit builds, bounded artifact snapshots, four concurrent uploads by default, idempotent retries, and status/logs through the existing API. Credentials are stored separately from project configuration; CLI state contains no token or signed URL.
+- `npm run check` passed all 41 tests, including 11 CLI tests. The CLI integration uses real loopback HTTP with the milestone 2 handler and checks upload failure without finalization, immutable resume, ready retries, changed-manifest conflicts, status/logs, and credential handling. No AWS infrastructure or live project records were changed for this milestone.
+- Remaining acceptance work: live CLI smoke test against AWS, Next.js static-export preview fixture, and framework asset/navigation verification beneath `/d/<deployment-id>/`. Framework detection does not rewrite root-absolute URLs or make SSR output deployable. GitHub Actions and dashboard work remain milestone 4.
 
 ### Milestone 4 — dashboard and GitHub workflow
 

@@ -64,6 +64,16 @@ export async function initProject(root, options) {
 
 export async function loadProject(root) { return validateConfig(await readJson(resolve(root, CONFIG_NAME))); }
 
+export function validatePreviewPaths(artifacts, basePath) {
+  for (const file of artifacts.filter(file => file.path.endsWith('.html'))) {
+    for (const match of file.body.toString('utf8').matchAll(/\b(?:src|href)\s*=\s*["'](\/(?!\/)[^"']*)["']/gi)) {
+      if (match[1] !== basePath && !match[1].startsWith(basePath + '/')) {
+        throw new Error(`Root-absolute URL in ${file.path} points outside this preview. Configure the framework base path with BETTERVERCEL_BASE_PATH and rebuild; relative URLs also work.`);
+      }
+    }
+  }
+}
+
 export async function runBuild(root, config, { env = process.env, output = process.stdout } = {}) {
   if (config.buildCommand === null) return;
   const buildEnv = { ...env };
@@ -101,7 +111,7 @@ export async function collectArtifacts(root, config) {
       if (!entry.isFile()) throw new Error('Build output must contain only regular files.');
       if (artifacts.length >= MAX_FILES) throw new Error('Build exceeds the 500-file limit. Remove unnecessary output files.');
       const name = relative(output, path).split(sep).join('/');
-      if (!/^[A-Za-z0-9_@.-]+(?:\/[A-Za-z0-9_@.-]+)*$/.test(name) || name.length > 240) throw new Error(`Unsupported artifact path: ${name}`);
+      if (!/^[A-Za-z0-9_@.~\-]+(?:\/[A-Za-z0-9_@.~\-]+)*$/.test(name) || name.length > 240) throw new Error(`Unsupported artifact path: ${name}`);
       const contentType = artifactContentType(name);
       if (!contentType) throw new Error(`Unsupported artifact extension: ${name}. Remove it from the build output.`);
       const stat = await lstat(path);

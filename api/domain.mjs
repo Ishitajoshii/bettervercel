@@ -57,7 +57,7 @@ export function normalizeRequest(input, idempotencyKey) {
   let totalBytes = 0;
   const files = input.files.map(file => {
     requireValue(file && typeof file.path === 'string' && file.path.length <= 240 &&
-      /^[A-Za-z0-9_@.-]+(?:\/[A-Za-z0-9_@.-]+)*$/.test(file.path) &&
+      /^[A-Za-z0-9_@.~\-]+(?:\/[A-Za-z0-9_@.~\-]+)*$/.test(file.path) &&
       !file.path.split('/').some(part => part === '.' || part === '..') && !seen.has(file.path),
     'Invalid or duplicate manifest path.');
     seen.add(file.path);

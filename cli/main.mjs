@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { deploymentIdFor, deploymentProject, normalizeRequest, validProject } from '../api/domain.mjs';
-import { apiUrl, collectArtifacts, initProject, loadProject, readJson, runBuild } from './project.mjs';
+import { apiUrl, collectArtifacts, initProject, loadProject, readJson, runBuild, validatePreviewPaths } from './project.mjs';
 import { getToken, readToken, saveToken, validateToken } from './credentials.mjs';
 import { createClient, safeMessage, uploadArtifacts } from './client.mjs';
 
@@ -124,6 +124,7 @@ export async function runCli(args, { cwd = process.cwd(), env = process.env, inp
   const body = { projectId: config.projectId, framework: config.framework, ...metadata, ...(commitSha ? { commitSha } : {}),
     files: artifacts.map(({ body: bytes, ...file }) => file) };
   const normalized = normalizeRequest(body, key);
+  validatePreviewPaths(artifacts, buildEnv.BETTERVERCEL_BASE_PATH);
   if (Buffer.byteLength(JSON.stringify(body)) > 220_000) throw new Error('Manifest exceeds the 220,000-byte API request limit. Shorten paths or reduce file count.');
   output.write(`Uploading ${artifacts.length} files (${normalized.totalBytes} bytes). Idempotency key: ${key}\n`);
   try {
@@ -138,6 +139,6 @@ export async function runCli(args, { cwd = process.cwd(), env = process.env, inp
     showDeployment(ready, output);
     return ready;
   } catch (error) {
-    throw new Error(`${safeMessage(error.message, token)}\nTo resume unchanged output within 15 minutes: bettervercel deploy ${shellArgument(root)} --skip-build --idempotency-key ${key}${commitSha ? ` --commit ${commitSha}` : ''}\nAfter expiry or a build change, run deploy with a new key.`);
+    throw new Error(`${safeMessage(error.message, token)}\nTo resume unchanged output within 15 minutes: bettervercel deploy ${shellArgument(root)} --skip-build --idempotency-key ${key}${commitSha ? ` --commit ${commitSha}` : ''}${branch ? ` --branch ${shellArgument(branch)}` : ''}${pullRequest ? ` --pull-request ${pullRequest}` : ''}\nAfter expiry or a build change, run deploy with a new key.`);
   }
 }

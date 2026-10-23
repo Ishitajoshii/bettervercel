@@ -59,6 +59,7 @@ test('does not introduce always-on compute, KMS keys, bootstrap assets, or clean
   assert.deepEqual(new Set(types), new Set([
     'AWS::S3::Bucket', 'AWS::S3::BucketPolicy', 'AWS::CloudFront::Function',
     'AWS::CloudFront::CachePolicy', 'AWS::CloudFront::OriginAccessControl', 'AWS::CloudFront::Distribution',
+    'AWS::CloudFront::ResponseHeadersPolicy',
   ]));
   assert.equal(JSON.stringify(template.toJSON()).includes('BootstrapVersion'), false);
 });

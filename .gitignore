@@ -15,6 +15,7 @@ out/
 coverage/
 .cache/
 .vite/
+.next/
 *.tsbuildinfo
 
 # Local environment and AWS credentials

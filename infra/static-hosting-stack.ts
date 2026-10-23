@@ -72,6 +72,21 @@ export class StaticHostingStack extends Stack {
       })),
     });
 
+    distribution.addBehavior('dashboard/*', origins.S3BucketOrigin.withOriginAccessControl(bucket), {
+      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+      cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+      responseHeadersPolicy: new cloudfront.ResponseHeadersPolicy(this, 'DashboardHeaders', {
+        securityHeadersBehavior: {
+          contentSecurityPolicy: { override: true, contentSecurityPolicy: "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https://*.amazonaws.com; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" },
+          contentTypeOptions: { override: true },
+          frameOptions: { override: true, frameOption: cloudfront.HeadersFrameOption.DENY },
+          referrerPolicy: { override: true, referrerPolicy: cloudfront.HeadersReferrerPolicy.NO_REFERRER },
+        },
+      }),
+      functionAssociations: [{ function: router, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+    });
+
     new CfnOutput(this, 'BucketName', { value: bucket.bucketName });
     new CfnOutput(this, 'DistributionId', { value: distribution.distributionId });
     new CfnOutput(this, 'DomainName', { value: distribution.distributionDomainName });

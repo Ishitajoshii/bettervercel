@@ -26,16 +26,20 @@ async function fixture() {
     async getDeployment(owner, id) { const r = records.get(id); return r?.projectId === owner ? structuredClone(r) : undefined; },
     async transition(record, status, fields) {
       const r = records.get(record.deploymentId);
-      if (r.status !== 'uploading') return false;
+      if (r.status !== record.status) return false;
       Object.assign(r, { status }, fields); transitions++; return true;
     },
     async listDeployments(owner) { return { records: [...records.values()].filter(r => r.projectId === owner) }; },
   };
   const signs = [];
+  let removalComplete = false;
+  let removalFailure = false;
+  const removed = [];
   const handler = createHandler({ store, domain: 'test.cloudfront.net', now: () => time, objects: {
     async sign(key, file, expiresIn) { signs.push({ key, file, expiresIn }); return { path: file.path, key, expiresIn }; },
     async validate() { await new Promise(resolve => setImmediate(resolve)); onValidate(); return validation; },
-  } });
+    async remove(record) { if (removalFailure) throw new Error('S3 unavailable'); removed.push(record.deploymentId); },
+  }, delivery: { async remove() { return removalComplete; } } });
   async function request(routeKey, body, { token = credentials.token, params = {}, headers = {}, query, iam } = {}) {
     const response = await handler({ routeKey, body: body === undefined ? '' : JSON.stringify(body),
       headers: { authorization: `Bearer ${token}`, 'idempotency-key': 'deploy-key-001', ...headers },
@@ -44,6 +48,7 @@ async function fixture() {
     return { status: response.statusCode, body: JSON.parse(response.body) };
   }
   return { request, projects, records, signs, credentials, handler,
+    removed, completeRemoval() { removalComplete = true; }, failRemoval(value) { removalFailure = value; },
     setValidation(value) { validation = value; }, onValidate(callback) { onValidate = callback; },
     advance(ms) { time += ms; }, transitions: () => transitions };
 }
@@ -59,6 +64,55 @@ test('project creation is operator-only and returns a token once; storage contai
   assert.equal(stored.deployToken, undefined);
   assert.equal(stored.tokenHash.length, 64);
   assert.ok(!JSON.stringify(stored).includes(result.body.deployToken));
+});
+
+test('project details require the owning token and never expose credential material', async () => {
+  const f = await fixture();
+  const params = { projectId: a };
+  assert.equal((await f.request('GET /v1/projects/{projectId}', undefined, { params, token: 'wrong' })).status, 401);
+  const response = await f.request('GET /v1/projects/{projectId}', undefined, { params });
+  assert.equal(response.body.projectId, a);
+  assert.ok(!JSON.stringify(response).includes('tokenHash'));
+  assert.ok(!JSON.stringify(response).includes(f.credentials.token));
+});
+
+test('branch and PR metadata round trip, validate, and participate in idempotency', async () => {
+  const f = await fixture();
+  const input = { ...manifest(), branch: 'feature/dashboard', pullRequest: 17 };
+  const created = await f.request('POST /v1/deployments', input);
+  assert.equal(created.body.branch, input.branch); assert.equal(created.body.pullRequest, 17);
+  assert.equal((await f.request('POST /v1/deployments', { ...input, pullRequest: 18 })).status, 409);
+  for (const change of [{ branch: 'x\ny' }, { branch: 'x'.repeat(256) }, { branch: [] }, { pullRequest: '17' }, { pullRequest: -1 }]) {
+    assert.throws(() => normalizeRequest({ ...input, ...change }, 'metadata-test'));
+  }
+});
+
+test('deletion waits for signed URLs to expire, isolates tokens, retries partial failure and waits for cache removal', async () => {
+  const f = await fixture();
+  f.projects.set(b, { projectId: b, ...await issueToken() });
+  const created = await f.request('POST /v1/deployments', manifest(b), { token: f.projects.get(b).token });
+  const params = { deploymentId: created.body.deploymentId };
+  const route = 'DELETE /v1/deployments/{deploymentId}';
+  assert.equal((await f.request(route, undefined, { params })).status, 401);
+  const options = { params, token: f.projects.get(b).token };
+  await f.request('POST /v1/deployments/{deploymentId}/finalize', undefined, options);
+  assert.equal((await f.request(route, undefined, options)).status, 409);
+  assert.equal(f.removed.length, 0);
+  f.advance(961000); f.failRemoval(true);
+  assert.equal((await f.request(route, undefined, options)).status, 500);
+  assert.equal(f.records.get(params.deploymentId).status, 'deleting');
+  assert.equal((await f.request('POST /v1/deployments/{deploymentId}/finalize', undefined, options)).status, 409);
+  f.failRemoval(false);
+  const pending = await f.request(route, undefined, options);
+  assert.equal(pending.status, 202); assert.equal(pending.body.previewUrl, null);
+  f.completeRemoval();
+  const complete = await f.request(route, undefined, options);
+  assert.equal(complete.body.status, 'deleted'); assert.ok(complete.body.deletedAt);
+  const count = f.removed.length;
+  assert.equal((await f.request(route, undefined, options)).status, 200);
+  assert.equal(f.removed.length, count);
+  const retry = await f.request('POST /v1/deployments', manifest(b), { token: f.projects.get(b).token });
+  assert.equal(retry.body.status, 'deleted'); assert.deepEqual(retry.body.uploads, []);
 });
 
 test('invalid tokens cannot create, read, finalize, or list deployments', async () => {

@@ -10,13 +10,37 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CACHE_CONTROL, digest, issueToken, MAX_BYTES, prefix } from '../api/domain.mjs';
 import { createHandler } from '../api/handler.mjs';
-import { collectArtifacts, detectFramework, initProject, loadProject, runBuild, validateConfig } from '../cli/project.mjs';
+import { collectArtifacts, detectFramework, initProject, loadProject, runBuild, validateConfig, validatePreviewPaths } from '../cli/project.mjs';
 import { createClient, uploadArtifacts } from '../cli/client.mjs';
 import { runCli } from '../cli/main.mjs';
 
 const projectId = 'p1111111111111111';
 const config = { apiUrl: 'https://example.execute-api.ap-south-1.amazonaws.com', projectId,
   framework: 'static', outputDirectory: 'dist', buildCommand: null };
+
+test('preview validation rejects root assets and output built for a different deployment', () => {
+  const artifact = html => [{ path: 'index.html', body: Buffer.from(html) }];
+  for (const html of ['<script src="/assets/app.js"></script>', '<a href="/about/">About</a>', '<script src="/d/old/_next/app.js"></script>']) {
+    assert.throws(() => validatePreviewPaths(artifact(html), '/d/current'), /outside this preview/);
+  }
+  validatePreviewPaths(artifact('<script src="/d/current/_next/app.js"></script><a href="./about/">About</a>'), '/d/current');
+});
+
+test('deploy supplies its deterministic build path and sends CI branch and PR metadata', async t => {
+  const root = await temp(t); const svc = await service(t);
+  await writeFile(join(root, 'bettervercel.json'), JSON.stringify({ ...config, apiUrl: svc.base, buildCommand: 'explicit-build' }));
+  let basePath;
+  const result = await runCli(['deploy', '--idempotency-key', 'ci-metadata-key'], { cwd: root,
+    env: { BETTERVERCEL_TOKEN: svc.token, BETTERVERCEL_BRANCH: 'feature/dashboard', BETTERVERCEL_PR_NUMBER: '23', GITHUB_SHA: 'abcdef0' },
+    output: { write() {} }, build: async (directory, config, { env }) => {
+      basePath = env.BETTERVERCEL_BASE_PATH;
+      assert.equal(basePath, `/d/${env.BETTERVERCEL_DEPLOYMENT_ID}`);
+      await outputFiles(directory, { 'index.html': `<a href="${basePath}/about/">About</a>` });
+    } });
+  assert.equal(basePath, `/d/${result.deploymentId}`);
+  assert.equal(result.branch, 'feature/dashboard'); assert.equal(result.pullRequest, 23);
+  assert.equal(result.commitSha, 'abcdef0');
+});
 async function temp(t) {
   const root = await mkdtemp(join(tmpdir(), 'bettervercel-cli-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -68,6 +92,13 @@ test('manifest contains exact bytes, SHA-256, API MIME types, relative paths and
     assert.equal(file.cacheControl, CACHE_CONTROL);
   }
   assert.equal(files[0].contentType, 'text/javascript; charset=utf-8');
+});
+
+test('Next Turbopack tilde chunk filenames survive collection and API manifest normalization', async t => {
+  const root = await temp(t);
+  await outputFiles(root, { 'index.html': '<h1>Next</h1>', '_next/static/chunks/05b8f30dnzyw~.js': 'console.log(1)' });
+  const files = await collectArtifacts(root, config);
+  assert.ok(files.some(file => file.path.endsWith('~.js')));
 });
 
 test('artifact validation rejects missing index, unsupported names/extensions, empty/oversized output and symlink roots', async t => {

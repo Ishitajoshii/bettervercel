@@ -23,11 +23,18 @@ test('preserves asset paths and supports nested static export directory indexes'
 });
 
 test('rejects internal keys, invalid IDs, and path traversal rather than exposing other prefixes', () => {
-  for (const uri of ['/', '/deployments/sample/index.html', '/d/-bad/', '/d/UPPER/',
+  for (const uri of ['/dashboard/../index.html', '/dashboard/private.json', '/deployments/sample/index.html', '/d/-bad/', '/d/UPPER/',
     '/d/' + 'a'.repeat(64) + '/', '/d/sample/../other/index.html',
     '/d/sample/%2e%2e/other', '/d/sample/a%2fb', '/d/sample/a%5cb', '/d/sample/a\\b']) {
     assert.equal(route(uri).statusCode, 404, uri);
   }
+});
+
+test('dashboard routes expose only the public UI files and canonicalize the root', () => {
+  assert.equal(route('/').headers.location.value, '/dashboard/');
+  assert.equal(route('/dashboard').headers.location.value, '/dashboard/');
+  assert.equal(route('/dashboard/').uri, '/dashboard/index.html');
+  assert.equal(route('/dashboard/app.js').uri, '/dashboard/app.js');
 });
 
 test('API previews map to the owning project and legacy previews remain compatible', () => {

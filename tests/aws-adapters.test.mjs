@@ -1,13 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { S3Client } from '@aws-sdk/client-s3';
-import { createObjects, createStore } from '../api/aws.mjs';
+import { createDelivery, createObjects, createStore } from '../api/aws.mjs';
 import { CACHE_CONTROL, digest, prefix } from '../api/domain.mjs';
 
 const file = { path: 'index.html', size: 5, contentType: 'text/html; charset=utf-8', sha256: digest('hello') };
 const record = { projectId: 'p1111111111111111', deploymentId: `p1111111111111111-${'a'.repeat(32)}`, files: [file] };
 const checksum = Buffer.from(file.sha256, 'hex').toString('base64');
 const metadata = { ContentLength: 5, ContentType: file.contentType, CacheControl: CACHE_CONTROL, ChecksumSHA256: checksum };
+
+test('deletion uses exact manifest keys, surfaces partial failures, and invalidates both viewer and storage paths idempotently', async () => {
+  let input;
+  let fail = false;
+  const objects = createObjects({ async send(command) { input = command.input; return fail ? { Errors: [{ Code: 'AccessDenied' }] } : {}; } }, 'bucket');
+  await objects.remove(record);
+  assert.deepEqual(input.Delete.Objects, [{ Key: prefix(record) + 'index.html' }]);
+  fail = true; await assert.rejects(objects.remove(record), /could not be deleted/);
+  let complete = false;
+  const delivery = createDelivery({ async send(command) { input = command.input; return { Invalidation: { Status: complete ? 'Completed' : 'InProgress' } }; } }, 'E123');
+  assert.equal(await delivery.remove(record), false);
+  assert.equal(input.DistributionId, 'E123');
+  assert.deepEqual(input.InvalidationBatch.Paths.Items, [`/d/${record.deploymentId}*`, `/${prefix(record)}*`]);
+  const reference = input.InvalidationBatch.CallerReference;
+  complete = true; assert.equal(await delivery.remove(record), true);
+  assert.equal(input.InvalidationBatch.CallerReference, reference);
+});
 
 test('real S3 presigner binds key, size, MIME, cache policy, checksum, and create-only header', async () => {
   const client = new S3Client({ region: 'ap-south-1', credentials: { accessKeyId: 'TESTKEY', secretAccessKey: 'test-secret' } });

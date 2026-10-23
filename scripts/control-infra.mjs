@@ -12,6 +12,7 @@ const result = spawnSync(process.execPath, ['node_modules/aws-cdk/bin/cdk', comm
   ...(command === 'deploy' ? ['--outputs-file', 'control-outputs.json'] : []), ...process.argv.slice(3)], {
   stdio: 'inherit', env: { ...process.env, BETTERVERCEL_CONTROL_PLANE: '1',
     BETTERVERCEL_BUCKET: outputs.BucketName, BETTERVERCEL_PREVIEW_DOMAIN: outputs.DomainName,
+    BETTERVERCEL_DISTRIBUTION_ID: outputs.DistributionId,
     AWS_REGION: outputs.Region },
 });
 if (result.error) throw result.error;

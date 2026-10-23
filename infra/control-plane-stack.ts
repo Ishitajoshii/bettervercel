@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 interface ControlPlaneStackProps extends StackProps {
   bucketName: string;
   previewDomain: string;
+  distributionId: string;
 }
 
 export class ControlPlaneStack extends Stack {
@@ -36,18 +37,23 @@ export class ControlPlaneStack extends Stack {
       handler: 'index.handler', code: lambda.Code.fromAsset(fileURLToPath(new URL('../.build/control-api/', import.meta.url))),
       memorySize: 256, timeout: Duration.seconds(28), logGroup, role: executionRole,
       environment: { PROJECTS_TABLE: projects.tableName, DEPLOYMENTS_TABLE: deployments.tableName,
-        ARTIFACTS_BUCKET: props.bucketName, PREVIEW_DOMAIN: props.previewDomain },
+        ARTIFACTS_BUCKET: props.bucketName, PREVIEW_DOMAIN: props.previewDomain, DISTRIBUTION_ID: props.distributionId },
     });
     control.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:GetItem', 'dynamodb:PutItem'], resources: [projects.tableArn] }));
     control.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query'], resources: [deployments.tableArn] }));
     const bucketArn = `arn:${this.partition}:s3:::${props.bucketName}`;
-    control.addToRolePolicy(new iam.PolicyStatement({ actions: ['s3:GetObject', 's3:PutObject'], resources: [`${bucketArn}/deployments/p*/*/*`] }));
+    control.addToRolePolicy(new iam.PolicyStatement({ actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'], resources: [`${bucketArn}/deployments/p*/*/*`] }));
+    control.addToRolePolicy(new iam.PolicyStatement({ actions: ['cloudfront:CreateInvalidation'],
+      resources: [`arn:${this.partition}:cloudfront::${this.account}:distribution/${props.distributionId}`] }));
     control.addToRolePolicy(new iam.PolicyStatement({ actions: ['s3:ListBucket'], resources: [bucketArn],
       conditions: { StringLike: { 's3:prefix': ['deployments/p*/*/'] } } }));
     // The API role cannot bypass create-only semantics, even if a future signer omits the header.
     control.addToRolePolicy(new iam.PolicyStatement({ effect: iam.Effect.DENY, actions: ['s3:PutObject'],
       resources: [`${bucketArn}/deployments/p*/*/*`], conditions: { StringNotEquals: { 's3:if-none-match': '*' } } }));
-    const api = new apigw.HttpApi(this, 'DeployApi', { createDefaultStage: false });
+    const api = new apigw.HttpApi(this, 'DeployApi', { createDefaultStage: false,
+      corsPreflight: { allowOrigins: [`https://${props.previewDomain}`],
+        allowMethods: [apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.DELETE],
+        allowHeaders: ['authorization', 'content-type'], maxAge: Duration.minutes(10) } });
     new apigw.HttpStage(this, 'ApiStage', { httpApi: api, stageName: '$default', autoDeploy: true,
       throttle: { rateLimit: 5, burstLimit: 10 } });
     const integration = new integrations.HttpLambdaIntegration('ControlIntegration', control);
@@ -57,6 +63,8 @@ export class ControlPlaneStack extends Stack {
       ['/v1/deployments', apigw.HttpMethod.POST],
       ['/v1/deployments/{deploymentId}/finalize', apigw.HttpMethod.POST],
       ['/v1/deployments/{deploymentId}', apigw.HttpMethod.GET],
+      ['/v1/deployments/{deploymentId}', apigw.HttpMethod.DELETE],
+      ['/v1/projects/{projectId}', apigw.HttpMethod.GET],
       ['/v1/projects/{projectId}/deployments', apigw.HttpMethod.GET],
     ] as const) api.addRoutes({ path, methods: [method], integration });
     new CfnOutput(this, 'ApiUrl', { value: api.apiEndpoint });
