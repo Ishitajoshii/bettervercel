@@ -13,6 +13,7 @@ export function requireValue(condition, message, status = 400) {
   if (!condition) throw new HttpError(status, message);
 }
 export const digest = value => createHash('sha256').update(value).digest('hex');
+export const deploymentIdFor = (project, key) => `${project}-${digest(key).slice(0, 32)}`;
 export const projectId = () => `p${randomBytes(8).toString('hex')}`;
 export function validProject(id) { return typeof id === 'string' && /^p[a-f0-9]{16}$/.test(id); }
 export function deploymentProject(id) {
@@ -48,6 +49,8 @@ export function normalizeRequest(input, idempotencyKey) {
   requireValue(input && validProject(input.projectId), 'Invalid project ID.');
   requireValue(['vite', 'astro', 'next-static', 'static'].includes(input.framework), 'Unsupported static framework.');
   requireValue(input.commitSha === undefined || (typeof input.commitSha === 'string' && /^[a-f0-9]{7,40}$/.test(input.commitSha)), 'Invalid commit SHA.');
+  requireValue(input.branch === undefined || (typeof input.branch === 'string' && input.branch.length > 0 && input.branch.length <= 255 && !/[\x00-\x1f\x7f]/.test(input.branch)), 'Invalid branch.');
+  requireValue(input.pullRequest === undefined || (Number.isSafeInteger(input.pullRequest) && input.pullRequest > 0 && input.pullRequest <= 2147483647), 'Invalid pull request number.');
   requireValue(Array.isArray(input.files) && input.files.length > 0 && input.files.length <= MAX_FILES,
     'Manifest must contain 1–500 files.');
   const seen = new Set();
@@ -67,15 +70,19 @@ export function normalizeRequest(input, idempotencyKey) {
   }).sort((a, b) => a.path.localeCompare(b.path, 'en'));
   requireValue(totalBytes > 0 && totalBytes <= MAX_BYTES, 'Artifact must contain 1 byte–25 MiB.');
   requireValue(files.some(file => file.path === 'index.html' && file.size > 0), 'A nonempty index.html is required.');
-  const request = { projectId: input.projectId, framework: input.framework, commitSha: input.commitSha ?? null, files };
+  const request = { projectId: input.projectId, framework: input.framework, commitSha: input.commitSha ?? null, files,
+    ...(input.branch !== undefined ? { branch: input.branch } : {}),
+    ...(input.pullRequest !== undefined ? { pullRequest: input.pullRequest } : {}) };
   return { ...request, totalBytes, requestHash: digest(JSON.stringify(request)),
-    deploymentId: `${input.projectId}-${digest(idempotencyKey).slice(0, 32)}` };
+    deploymentId: deploymentIdFor(input.projectId, idempotencyKey) };
 }
 export function prefix(record) { return `deployments/${record.projectId}/${record.deploymentId}/`; }
 export function summary(record, domain) {
   return {
     projectId: record.projectId, deploymentId: record.deploymentId, status: record.status,
     framework: record.framework, commitSha: record.commitSha, createdAt: record.createdAt,
+    branch: record.branch ?? null, pullRequest: record.pullRequest ?? null,
+    deletedAt: record.deletedAt ?? null,
     readyAt: record.readyAt ?? null, uploadExpiresAt: record.uploadExpiresAt,
     totalBytes: record.totalBytes, fileCount: record.files.length,
     previewUrl: record.status === 'ready' ? `https://${domain}/d/${record.deploymentId}/` : null,

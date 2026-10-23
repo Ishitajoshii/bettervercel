@@ -1,6 +1,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { S3Client, PutObjectCommand, HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
+import { CloudFrontClient, CreateInvalidationCommand } from '@aws-sdk/client-cloudfront';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { CACHE_CONTROL, prefix } from './domain.mjs';
 import { createHandler } from './handler.mjs';
@@ -24,7 +25,7 @@ export function createStore(client, projects, deployments) {
     getDeployment: (projectId, deploymentId) => get(deployments, { projectId, deploymentId }),
     createDeployment: record => insert(deployments, record, 'deploymentId'),
     async transition(record, status, fields) {
-      const values = { ':before': 'uploading', ':after': status };
+      const values = { ':before': record.status ?? 'uploading', ':after': status };
       const names = { '#status': 'status' };
       const assignments = ['#status = :after'];
       Object.entries(fields).forEach(([key, value], index) => {
@@ -54,6 +55,12 @@ export function createStore(client, projects, deployments) {
 
 export function createObjects(client, bucket) {
   return {
+    async remove(record) {
+      // A validated manifest is bounded to 500 keys; delete only those exact project-owned keys.
+      const result = await client.send(new DeleteObjectsCommand({ Bucket: bucket,
+        Delete: { Objects: record.files.map(file => ({ Key: prefix(record) + file.path })), Quiet: true } }));
+      if (result.Errors?.length) throw new Error('Some artifacts could not be deleted; retry deletion.');
+    },
     async sign(key, file, expiresIn) {
       const checksum = Buffer.from(file.sha256, 'hex').toString('base64');
       const headers = { 'content-type': file.contentType, 'content-length': String(file.size),
@@ -102,11 +109,23 @@ export function createObjects(client, bucket) {
   };
 }
 
+export function createDelivery(client, distributionId) {
+  return {
+    async remove(record) {
+      const result = await client.send(new CreateInvalidationCommand({ DistributionId: distributionId,
+        InvalidationBatch: { CallerReference: `delete-${record.deploymentId}`,
+          Paths: { Quantity: 2, Items: [`/d/${record.deploymentId}*`, `/${prefix(record)}*`] } } }));
+      return result.Invalidation?.Status === 'Completed';
+    },
+  };
+}
+
 let control;
 export async function handler(event) {
   control ??= createHandler({
     store: createStore(DynamoDBDocumentClient.from(new DynamoDBClient({})), process.env.PROJECTS_TABLE, process.env.DEPLOYMENTS_TABLE),
     objects: createObjects(new S3Client({}), process.env.ARTIFACTS_BUCKET), domain: process.env.PREVIEW_DOMAIN,
+    delivery: createDelivery(new CloudFrontClient({}), process.env.DISTRIBUTION_ID),
   });
   return control(event);
 }

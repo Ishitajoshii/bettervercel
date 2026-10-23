@@ -1,7 +1,7 @@
 import { deploymentProject, HttpError, issueToken, normalizeRequest, prefix, projectId,
   requireValue, summary, UPLOAD_SECONDS, validProject, verifyToken } from './domain.mjs';
 
-export function createHandler({ store, objects, domain, now = () => Date.now() }) {
+export function createHandler({ store, objects, delivery, domain, now = () => Date.now() }) {
   async function authenticate(id, event) {
     requireValue(validProject(id), 'Invalid project ID.');
     const project = await store.getProject(id);
@@ -43,6 +43,35 @@ export function createHandler({ store, objects, domain, now = () => Date.now() }
       const saved = created ? record : await store.getDeployment(record.projectId, record.deploymentId);
       requireValue(saved && saved.requestHash === record.requestHash, 'Idempotency key already used for a different request.', 409);
       return [created ? 201 : 200, { ...summary(saved, domain), uploads: await uploads(saved) }];
+    }
+    if (route === 'GET /v1/projects/{projectId}') {
+      const project = await authenticate(event.pathParameters?.projectId, event);
+      return [200, { projectId: project.projectId, name: project.name, createdAt: project.createdAt }];
+    }
+    if (route === 'DELETE /v1/deployments/{deploymentId}') {
+      const id = event.pathParameters?.deploymentId;
+      const owner = deploymentProject(id);
+      await authenticate(owner, event);
+      let record = await store.getDeployment(owner, id);
+      requireValue(record, 'Deployment not found.', 404);
+      if (record.status === 'deleted') return [200, summary(record, domain)];
+      // Signed PUTs cannot be revoked individually. Never remove objects while a URL can recreate them.
+      requireValue(record.uploadExpiresAt + 60 <= Math.floor(now() / 1000),
+        'Deletion is available 16 minutes after creation, once all upload URLs have expired. Retry then.', 409);
+      if (record.status !== 'deleting') {
+        await store.transition(record, 'deleting', { logs: ['Deletion requested; removing artifacts and cached previews.'] });
+        record = await store.getDeployment(owner, id);
+      }
+      if (record.status === 'deleted') return [200, summary(record, domain)];
+      requireValue(record.status === 'deleting', 'Deployment changed; retry deletion.', 409);
+      // Repeating cleanup and the deterministic invalidation is safe after any partial failure.
+      await objects.remove(record);
+      const complete = await delivery.remove(record);
+      if (complete) await store.transition(record, 'deleted', {
+        deletedAt: new Date(now()).toISOString(), logs: ['Artifacts removed; CloudFront invalidation completed.'],
+      });
+      record = await store.getDeployment(owner, id);
+      return [record.status === 'deleted' ? 200 : 202, summary(record, domain)];
     }
     if (route === 'GET /v1/projects/{projectId}/deployments') {
       const id = event.pathParameters?.projectId;

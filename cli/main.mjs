@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { randomUUID } from 'node:crypto';
-import { deploymentProject, normalizeRequest, validProject } from '../api/domain.mjs';
+import { deploymentIdFor, deploymentProject, normalizeRequest, validProject } from '../api/domain.mjs';
 import { apiUrl, collectArtifacts, initProject, loadProject, readJson, runBuild } from './project.mjs';
 import { getToken, readToken, saveToken, validateToken } from './credentials.mjs';
 import { createClient, safeMessage, uploadArtifacts } from './client.mjs';
@@ -24,20 +24,23 @@ Use --help with any command. See cli/README.md for framework setup and retries.
 const optionTypes = {
   api: 'string', project: 'string', output: 'string', 'build-command': 'string',
   'token-stdin': 'boolean', 'skip-build': 'boolean', 'idempotency-key': 'string', commit: 'string',
-  concurrency: 'string', directory: 'string', help: 'boolean',
+  concurrency: 'string', directory: 'string', help: 'boolean', branch: 'string', 'pull-request': 'string',
 };
 const allowed = {
   init: ['api', 'project', 'output', 'build-command'], login: ['api', 'project', 'token-stdin'],
-  deploy: ['skip-build', 'idempotency-key', 'commit', 'concurrency'], status: ['directory'], logs: ['directory'],
+  deploy: ['skip-build', 'idempotency-key', 'commit', 'concurrency', 'branch', 'pull-request'], status: ['directory'], logs: ['directory'],
 };
 const statePath = root => resolve(root, '.bettervercel', 'deployment.json');
+const shellArgument = value => process.platform === 'win32'
+  ? `'${value.replaceAll("'", "''")}'`
+  : `'${value.replaceAll("'", "'\\''")}'`;
 async function writeState(root, state) {
   await mkdir(resolve(root, '.bettervercel'), { recursive: true });
   await writeFile(statePath(root), JSON.stringify(state, null, 2) + '\n');
 }
 function checkDeployment(data, config, expected) {
   if (!data || deploymentProject(data.deploymentId) !== config.projectId ||
-      (expected && data.deploymentId !== expected) || !['uploading', 'ready', 'failed'].includes(data.status)) {
+      (expected && data.deploymentId !== expected) || !['uploading', 'ready', 'failed', 'deleting', 'deleted'].includes(data.status)) {
     throw new Error('Deploy API returned an unexpected deployment. Check the API URL.');
   }
   return data;
@@ -105,14 +108,20 @@ export async function runCli(args, { cwd = process.cwd(), env = process.env, inp
   if (!/^[A-Za-z0-9_-]{8,128}$/.test(key)) throw new Error('--idempotency-key must contain 8–128 letters, digits, underscores, or hyphens.');
   const commitSha = values.commit ?? env.GITHUB_SHA;
   if (commitSha !== undefined && !/^[a-f0-9]{7,40}$/.test(commitSha)) throw new Error('--commit or GITHUB_SHA must be 7–40 lowercase hexadecimal characters.');
-  if (!values['skip-build']) await build(root, config, { env, output });
+  const branch = (values.branch ?? env.BETTERVERCEL_BRANCH ?? env.GITHUB_HEAD_REF ?? env.GITHUB_REF_NAME) || undefined;
+  const prValue = values['pull-request'] ?? env.BETTERVERCEL_PR_NUMBER;
+  const pullRequest = prValue ? Number(prValue) : undefined;
+  const metadata = { ...(branch ? { branch } : {}), ...(pullRequest !== undefined ? { pullRequest } : {}) };
+  const deploymentId = deploymentIdFor(config.projectId, key);
+  const buildEnv = { ...env, BETTERVERCEL_DEPLOYMENT_ID: deploymentId, BETTERVERCEL_BASE_PATH: `/d/${deploymentId}` };
+  if (!values['skip-build']) await build(root, config, { env: buildEnv, output });
   let artifacts;
   try { artifacts = await collectArtifacts(root, config); }
   catch (error) {
     if (error.code === 'ENOENT') throw new Error('Build output is missing. Configure buildCommand or build locally before deploying.');
     throw error;
   }
-  const body = { projectId: config.projectId, framework: config.framework, ...(commitSha ? { commitSha } : {}),
+  const body = { projectId: config.projectId, framework: config.framework, ...metadata, ...(commitSha ? { commitSha } : {}),
     files: artifacts.map(({ body: bytes, ...file }) => file) };
   const normalized = normalizeRequest(body, key);
   if (Buffer.byteLength(JSON.stringify(body)) > 220_000) throw new Error('Manifest exceeds the 220,000-byte API request limit. Shorten paths or reduce file count.');
@@ -121,7 +130,7 @@ export async function runCli(args, { cwd = process.cwd(), env = process.env, inp
     const created = checkDeployment(await client.api('POST', '/v1/deployments', body, key), config, normalized.deploymentId);
     await writeState(root, { apiUrl: config.apiUrl, projectId: config.projectId, deploymentId: created.deploymentId, idempotencyKey: key });
     output.write(`Deployment: ${created.deploymentId}\n`);
-    if (created.status === 'failed') throw new Error('Deployment is failed. Use a new idempotency key for a fresh deployment.');
+    if (['failed', 'deleting', 'deleted'].includes(created.status)) throw new Error(`Deployment is ${created.status}. Use a new idempotency key for a fresh deployment.`);
     if (created.status === 'ready') { showDeployment(created, output); return created; }
     await uploadArtifacts(client, created.uploads, artifacts, concurrency);
     const ready = checkDeployment(await client.api('POST', `/v1/deployments/${created.deploymentId}/finalize`), config, created.deploymentId);
@@ -129,6 +138,6 @@ export async function runCli(args, { cwd = process.cwd(), env = process.env, inp
     showDeployment(ready, output);
     return ready;
   } catch (error) {
-    throw new Error(`${safeMessage(error.message, token)}\nTo resume unchanged output within 15 minutes: bettervercel deploy ${JSON.stringify(root)} --skip-build --idempotency-key ${key}${commitSha ? ` --commit ${commitSha}` : ''}\nAfter expiry or a build change, run deploy with a new key.`);
+    throw new Error(`${safeMessage(error.message, token)}\nTo resume unchanged output within 15 minutes: bettervercel deploy ${shellArgument(root)} --skip-build --idempotency-key ${key}${commitSha ? ` --commit ${commitSha}` : ''}\nAfter expiry or a build change, run deploy with a new key.`);
   }
 }
