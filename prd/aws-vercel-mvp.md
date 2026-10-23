@@ -169,15 +169,35 @@ Local implementation and verification:
 - Added the package's `bettervercel` executable and `npm run cli -- ...`; see [the CLI guide](../cli/README.md).
 - Configuration-only init, verified project-token login, explicit builds, bounded artifact snapshots, four concurrent uploads by default, idempotent retries, and status/logs through the existing API. Credentials are stored separately from project configuration; CLI state contains no token or signed URL.
 - `npm run check` passed all 41 tests, including 11 CLI tests. The CLI integration uses real loopback HTTP with the milestone 2 handler and checks upload failure without finalization, immutable resume, ready retries, changed-manifest conflicts, status/logs, and credential handling. No AWS infrastructure or live project records were changed for this milestone.
-- Remaining acceptance work: live CLI smoke test against AWS, Next.js static-export preview fixture, and framework asset/navigation verification beneath `/d/<deployment-id>/`. Framework detection does not rewrite root-absolute URLs or make SSR output deployable. GitHub Actions and dashboard work remain milestone 4.
+- The initial implementation left live CLI and Next export verification open. The follow-up review below closes the HTTP/content portion of those checks; interactive browser verification remains pending.
+
+### Milestone 3 follow-up review — October 24, 2026 (IST)
+
+All six CLI tasks were reviewed against code and tests. The original 41 tests passed before changes. Live review found and fixed two framework gaps: build commands now receive the deterministic `BETTERVERCEL_BASE_PATH` / deployment ID, and the CLI/API manifest allowlists accept `~` in Next Turbopack chunk filenames. HTML paths that escape the deployment prefix now fail before upload with build-configuration guidance. Existing requests without branch/PR metadata retain their original idempotency hash.
+
+- Live Vite: local build, saved login, deploy, status/logs, all 3 files byte-for-byte through CloudFront, and MIME checks passed. Build plus deployment and HTTP verification took 5.6 seconds.
+- Live Next.js 16.4.3: real static export, 19 verified files (398,084 bytes), chunk paths, and `/about/` directory navigation passed. Build plus deployment and HTTP verification took 16 seconds. [Next preview](https://d34mbpew2lb7ue.cloudfront.net/d/p7f0c6e2a840a04ed-866563d5bc4878abfc74c66208bcc3b1/).
+- The new fixture's production dependency audit reports zero vulnerabilities. `npm run verify:cli` records reproducible results under ignored `.build/cli-smoke-*/`; credentials remain in a separate ignored file and are never printed.
+- Browser automation failed at Windows sandbox startup, including after a reset. Real browser hydration/click verification is not claimed; HTTP/content checks and dashboard DOM interaction tests passed.
 
 ### Milestone 4 — dashboard and GitHub workflow
 
-- [ ] Build a static dashboard: projects, deployments, state, preview, delete.
-- [ ] Use operator-created API key; no self-serve signup.
-- [ ] Provide copy-paste GitHub Actions workflow using encrypted repository deploy token.
-- [ ] Send branch/PR metadata through workflow environment variables.
-- [ ] Document supported frameworks and Next static-export setup.
+- [x] Build a static dashboard: projects, deployments, state, preview, delete.
+- [x] Use operator-created API key; no self-serve signup.
+- [x] Provide copy-paste GitHub Actions workflow using encrypted repository deploy token.
+- [x] Send branch/PR metadata through workflow environment variables.
+- [x] Document supported frameworks and Next static-export setup.
+
+Implementation and verification:
+
+- [Live dashboard](https://d34mbpew2lb7ue.cloudfront.net/dashboard/): connect multiple operator-created projects; inspect paginated deployment state, commit, branch/PR, timestamps, bytes, preview and logs; disconnect to clear credentials. Tokens remain in tab memory. No public account creation or global administrative browser token was introduced.
+- Added authenticated project details and deployment deletion, exact manifest-key removal, retryable partial failure, and deterministic CloudFront invalidation of viewer and rewritten paths. Deletion waits until 16 minutes after creation so signed uploads have expired; clients repeat DELETE until cache removal completes. Interrupted deletion can be resumed. Metadata tombstones retain immutable IDs.
+- Both existing AWS stacks updated successfully after review of their diffs. No bucket/table replacements or always-running compute. Dashboard uses a dedicated no-cache behavior and security headers. API CORS permits the hosting origin; S3 delete and CloudFront invalidation permissions are scoped to project artifacts and the existing distribution.
+- All 51 tests passed: original coverage plus framework paths/Turbopack names, metadata/idempotency, token isolation, deletion retries/cache completion, dashboard authentication/rendering/deletion, and infrastructure/routing. The original live API security smoke test also passed again after deployment.
+- Live dashboard asset delivery/headers, CORS allow/deny, authenticated project details, branch/PR metadata, cross-project deletion denial, and the active-upload deletion guard passed. The original disposable Vite deployment was deleted after the upload window; CloudFront invalidation completed, its cached preview returned 403, a duplicate DELETE succeeded, and the separate Next project remained accessible. Results are in ignored `.build/cli-smoke-1792781813797/milestone-4-results.json`. The newer [Vite metadata preview](https://d34mbpew2lb7ue.cloudfront.net/d/p340dc4351eb589f8-a95d06f8fd093ce9924371dcb640144b/) remains available.
+- Post-deployment diffs for both stacks report no differences. The bucket, distribution, existing budget, and metadata tables were preserved.
+- [Workflow template](../examples/github-actions/deploy.yml) uses an encrypted repository token, read-only GitHub permissions, trusted same-repository PRs, and environment variables for branch/PR metadata. [Setup and framework guide](../docs/frameworks-and-actions.md) covers vendoring this unpublished CLI, Vite/Astro/React/Next configuration, retries, and dashboard operations. A hosted GitHub Actions run has not been performed; the milestone task is to provide the workflow, while running both sample deployments in GitHub remains release acceptance work.
+- Existing limitations remain: trusted projects share a browser origin; known uploaded paths are public before finalize; artifacts expire after seven days; SPA fallback, origin isolation, production aliases, and browser interaction acceptance remain open.
 
 ### Milestone 5 — release gate
 

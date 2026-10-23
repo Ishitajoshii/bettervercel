@@ -24,7 +24,7 @@ if (process.env.BETTERVERCEL_CONTROL_PLANE === '1') {
   const distributionId = process.env.BETTERVERCEL_DISTRIBUTION_ID;
   if (!bucketName || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucketName) ||
       !previewDomain || !/^[a-z0-9]+\.cloudfront\.net$/.test(previewDomain) || !distributionId || !/^[A-Z0-9]+$/.test(distributionId)) {
-    throw new Error('Set BETTERVERCEL_BUCKET and BETTERVERCEL_PREVIEW_DOMAIN from the hosting stack outputs.');
+    throw new Error('Set BETTERVERCEL_BUCKET, BETTERVERCEL_PREVIEW_DOMAIN and BETTERVERCEL_DISTRIBUTION_ID from the hosting stack outputs.');
   }
   const control = new ControlPlaneStack(app, 'BetterVercelControlStack', {
     env: { account: process.env.CDK_DEFAULT_ACCOUNT,

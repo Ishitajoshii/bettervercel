@@ -1,4 +1,4 @@
-# Deploy API (milestone 2)
+# Deploy API
 
 The control plane uses an API Gateway HTTP API, one ARM64 Node.js 24 Lambda, two DynamoDB on-demand tables, and the existing private artifact bucket. Lambda is outside a VPC, has no provisioned concurrency, and writes only to its own log group (three-day retention). The HTTP API is throttled to 5 requests/second with burst 10. Throttles and budget alerts are not hard spending caps.
 
@@ -32,6 +32,8 @@ Before first API use, update `BetterVercelStaticStack` with the current router. 
 | `POST /v1/deployments/{id}/finalize` | Owning project's bearer token | `200` ready after S3 verification |
 | `GET /v1/deployments/{id}` | Owning project's bearer token | Summary, state, timestamps, preview, retained log |
 | `GET /v1/projects/{id}/deployments?cursor=...` | Owning project's bearer token | Up to 20 summaries plus `nextCursor` |
+| `GET /v1/projects/{id}` | Owning project's bearer token | Project ID, name, creation time; no credential material |
+| `DELETE /v1/deployments/{id}` | Owning project's bearer token | `202` deleting / `200` deleted after cache removal; retry safely |
 
 Create a project with `npm run create:project -- "My project"`. This command prints the raw deploy token once. Save it in a secret store; do not commit it. The server stores a random salt and scrypt hash, compares hashes in constant time, and returns no credentials from status/list. Project creation is not public signup. IAM setup identities must be restricted to the intended operators.
 
@@ -51,7 +53,7 @@ Deployment creation body:
 }
 ```
 
-That checksum corresponds to the exact five bytes `hello`. `framework` is `vite`, `astro`, `next-static`, or `static`; `commitSha` is optional, 7–40 lowercase hexadecimal characters. Paths use ASCII letters/digits and `_@.-`, with `/` between segments. Absolute paths, dot segments, escapes, backslashes, duplicate paths, unsupported extensions, and mismatched MIME types are rejected. The exact extension-to-MIME allowlist is in `domain.mjs`. A nonempty root `index.html` is mandatory.
+That checksum corresponds to the exact five bytes `hello`. `framework` is `vite`, `astro`, `next-static`, or `static`; `commitSha` is optional, 7–40 lowercase hexadecimal characters. Optional `branch` is 1–255 characters without control characters; `pullRequest` is an integer from 1 to 2,147,483,647. Paths use ASCII letters/digits and `_@.~-`, with `/` between segments. Absolute paths, dot segments, escapes, backslashes, duplicate paths, unsupported extensions, and mismatched MIME types are rejected. The exact extension-to-MIME allowlist is in `domain.mjs`. A nonempty root `index.html` is mandatory.
 
 `Idempotency-Key` is 8–128 letters/digits/underscores/hyphens. Reusing it within a project with the same normalized manifest returns the existing deployment, even after ready; a changed request returns `409`. Different projects have separate keys. `commitSha`, framework, paths, sizes, MIME, and checksums are part of request identity; input file order is not.
 
@@ -60,12 +62,16 @@ That checksum corresponds to the exact five bytes `hello`. `framework` is `vite`
 - At most 500 files and **25 MiB (26,214,400 bytes)** total; file sizes must be safe nonnegative integers. JSON request bodies are capped at 220,000 bytes.
 - Upload window: 15 minutes from creation. Each signed URL lasts at most five minutes and never outlives that window. Retry creation with the same manifest/key to refresh URLs within the window.
 - Upload each `uploads[]` entry using its exact `method`, `url`, `headers`, and file bytes. Headers bind length, MIME, cache policy, SHA-256, and `If-None-Match: *`. Altered bytes/checksums or URL paths fail S3 validation/signature checks. Reuploading an existing object returns `412`; when retrying, a successfully uploaded immutable file can be skipped.
-- Keys are `deployments/<projectId>/<deploymentId>/<path>`. Tokens only authorize their project. Clients receive individual signed object URLs, never AWS credentials or a wildcard prefix grant. The Lambda role has no artifact delete permission and denies PUT without the create-only header.
+- Keys are `deployments/<projectId>/<deploymentId>/<path>`. Tokens only authorize their project. Clients receive individual signed object URLs, never AWS credentials or a wildcard prefix grant. The Lambda role can delete project artifacts for the authenticated deletion route and denies PUT without the create-only header. CloudFront invalidation permission is limited to this distribution.
 - Finalization checks the full S3 object listing, exact sizes, checksums, MIME, and cache headers. Missing files return `409` and remain retryable. Mismatched uploads return `422` and become `failed`. Expired finalization returns `409` and becomes `failed`.
-- DynamoDB conditionally creates deployments and conditionally transitions `uploading` to `ready` or `failed`. Concurrent successful finalizers converge on the same ready record; ready/failed records cannot be overwritten. Transient AWS failures return `500` without leaking service details and can be retried.
+- DynamoDB conditionally creates deployments and uses compare-and-set status transitions. Concurrent successful finalizers converge on the same ready record. Manifest/artifact contents cannot be overwritten. Deletion transitions `uploading`, `ready`, or `failed` to `deleting`, then `deleted`. Transient AWS failures return `500` without leaking service details and can be retried.
 - Only ready responses include a preview URL. Hosting paths are public, and a known path can be fetched as soon as its object is uploaded; state is **not** a CDN authorization gate. Use trusted private-alpha builds only. All previews share one origin, and SPA history fallback is deferred to the release gate.
 
 Status/list return file count and bytes without returning token hashes, manifests, or internal keys. Lists use descending deployment-ID order (not chronological order) and must be paginated until `nextCursor` is null. Logs are bounded state summaries, not build stdout. Expired abandoned deployments remain `uploading` until finalize is attempted; no scheduled worker is introduced.
+
+Deletion returns `409` until 16 minutes after creation (the upload window plus a one-minute margin). It conditionally marks the record deleting, removes exact manifest keys, and issues an idempotent invalidation covering viewer and rewritten storage paths. Repeat DELETE until it returns deleted; GET is read-only and does not drive cleanup. If the client disconnects, resume DELETE later. Records remain as immutable-ID tombstones. See [dashboard and workflow operations](../docs/frameworks-and-actions.md).
+
+Branch/PR metadata is included in summaries and request identity when supplied. Existing requests without these fields retain their original request hash. API CORS permits GET/DELETE with Authorization only from the configured CloudFront origin; project creation still requires SigV4 IAM authentication.
 
 ## Schema and retention
 

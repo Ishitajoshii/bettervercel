@@ -19,11 +19,11 @@ for (const [name, framework, source, outputDirectory, executable] of [
 ]) {
   const directory = resolve(root, name);
   if (results.some(result => result.name === name)) continue;
+  await cp(source, directory, { recursive: true, filter: path => !/(?:^|[\\/])(node_modules|\.next|dist|out)(?:[\\/]|$)/.test(path) });
   let config = await readJson(resolve(directory, 'bettervercel.json'), true);
   const env = { ...process.env, NEXT_TELEMETRY_DISABLED: '1',
     BETTERVERCEL_CREDENTIALS_FILE: resolve(root, 'credentials.json') };
   if (!config) {
-    await cp(source, directory, { recursive: true, filter: path => !/(?:^|[\\/])(node_modules|\.next|dist|out)(?:[\\/]|$)/.test(path) });
     if (name === 'next') await symlink(resolve(source, 'node_modules'), resolve(directory, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
     const project = await createProject(control.ApiUrl, hosting.Region, `CLI audit ${name}`);
     config = { apiUrl: control.ApiUrl, projectId: project.projectId, framework, outputDirectory,

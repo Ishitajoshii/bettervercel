@@ -52,7 +52,7 @@ Detection reads dependencies/devDependencies in that directory's `package.json`;
 
 Builds run only from the explicit `buildCommand` in this file, with the project as working directory. Without `--build-command`, `init` writes `null` and deployment uploads prebuilt output. It never infers or runs a package's build script automatically, installs dependencies, or runs a hosted build. `--skip-build` bypasses a configured build for retries. Treat build configuration as executable code and review it before deploying an unfamiliar checkout. Build stdout/stderr stays in your terminal; the CLI removes its token environment variable from the child process, but local build commands still run with your user permissions.
 
-Vite's `base: './'` works with path-based previews, as shown in the included sample. Astro must produce static HTML and assets compatible with the preview path. Next.js requires static export (`output: 'export'`); server output under `.next` is unsupported. Framework detection does not rewrite HTML or asset URLs. Root-absolute asset/navigation URLs will not work beneath `/d/<deployment-id>/`; Next.js assets and links need an appropriate build configuration. A Next.js preview fixture and end-to-end framework delivery checks remain part of the later acceptance work. SPA history fallback is not yet available.
+The CLI sets `BETTERVERCEL_BASE_PATH` and `BETTERVERCEL_DEPLOYMENT_ID` before the build. Vite's `base: './'` works with the included sample. Next.js needs `output: 'export'`, `trailingSlash: true`, and `basePath: process.env.BETTERVERCEL_BASE_PATH || ''`. The CLI rejects HTML URLs outside the preview path, including Next output built for a different deployment ID. Turbopack filenames containing `~` are supported. See [framework setup, the Next fixture, and GitHub Actions](../docs/frameworks-and-actions.md). Framework detection does not rewrite URLs or make SSR output deployable. SPA history fallback is not yet available.
 
 ## Commands and retries
 
@@ -66,6 +66,8 @@ bettervercel logs [deployment-id] [--directory path]
 
 `BETTERVERCEL_API_URL` and `BETTERVERCEL_PROJECT_ID` can provide the `init`/explicit `login` settings. Deploy/status/logs use the selected project's configuration. `--commit` or `GITHUB_SHA` supplies optional commit metadata; the CLI does not guess a commit from a parent repository.
 
+`--branch` or `BETTERVERCEL_BRANCH` supplies branch metadata (falling back to `GITHUB_HEAD_REF` / `GITHUB_REF_NAME`). `--pull-request` or `BETTERVERCEL_PR_NUMBER` supplies a positive PR number. These fields participate in idempotency; resume commands preserve them.
+
 Before contacting the API, deployment reads and snapshots at most 500 files / 25 MiB, requires a nonempty `index.html`, rejects unsupported paths/extensions, and computes SHA-256, MIME, size, relative path, and the server's fixed cache policy. Manifest JSON must also fit the API's 220,000-byte request limit. The file bytes used for hashing are the same bytes uploaded.
 
 Uploads use four workers by default, configurable from one to eight. Requests time out after 30 seconds and transient network/429/5xx errors get up to three attempts. The CLI never follows API or upload redirects and never sends the bearer token to S3. All uploads must succeed before finalization. An immutable-object `412` on retry is accepted provisionally; the API then verifies every object against the original manifest before making it ready.
@@ -78,4 +80,4 @@ Each deployment uses a new idempotency key unless supplied explicitly. The key a
 
 `npm run check` includes CLI filesystem/build tests, real loopback HTTP integration with the actual milestone 2 handler, interrupted upload/resume, immutable retries, ready retries, status/logs, credential validation, manifest limits, bounded concurrency, redirect refusal, and executable exit codes. These tests do not require AWS.
 
-Milestone 3 has been verified locally; its CLI has not yet been smoke-tested against the live AWS API. Existing hosting constraints still apply: public previews share one origin, known uploaded paths are accessible before finalization, and objects expire after seven days. See [the API guide](../api/README.md) and [the PRD](../prd/aws-vercel-mvp.md).
+`npm run verify:cli` exercises real Vite and Next builds against AWS and verifies every emitted file through CloudFront. It can resume with `npm run verify:cli -- .build/cli-smoke-<timestamp>`. See [the PRD](../prd/aws-vercel-mvp.md) for recorded results. Existing hosting constraints still apply: public previews share one origin, known uploaded paths are accessible before finalization, and objects expire after seven days. See [the API guide](../api/README.md).

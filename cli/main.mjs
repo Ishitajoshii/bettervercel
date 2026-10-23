@@ -19,6 +19,7 @@ init only writes bettervercel.json. Builds run only from its explicit buildComma
 login validates and saves an operator-issued token; it does not create projects.
 BETTERVERCEL_TOKEN overrides saved credentials. Use it directly in CI without login.
 status/logs default to the last local deployment. Logs are retained API summaries.
+deploy also accepts --branch NAME and --pull-request NUMBER (or BETTERVERCEL_BRANCH/BETTERVERCEL_PR_NUMBER).
 Use --help with any command. See cli/README.md for framework setup and retries.
 `;
 const optionTypes = {
