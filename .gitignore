@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+.build/
+control-outputs.json
+
+# CDK synthesis and local deployment state
+cdk.out/
+cdk-outputs.json
+cdk.context.json
+
+# Build output and caches (including nested example projects)
+dist/
+build/
+out/
+coverage/
+.cache/
+.vite/
+*.tsbuildinfo
+
+# Local environment and AWS credentials
+.env
+.env.*
+!.env.example
+.aws/
+
+# Logs and operating-system files
+*.log
+.DS_Store
+Thumbs.db
+Desktop.ini
