@@ -105,6 +105,7 @@ test('GitHub credentials are server-side, exact-secret scoped, and sessions have
   configured.hasResourceProperties('AWS::DynamoDB::Table', { TimeToLiveSpecification: { AttributeName: 'expiresAt', Enabled: true } });
   configured.hasResourceProperties('AWS::ApiGatewayV2::Api', { CorsConfiguration: {
     AllowOrigins: ['https://example.cloudfront.net'], AllowMethods: ['GET', 'POST', 'DELETE'],
+    AllowHeaders: ['authorization', 'content-type', 'idempotency-key'],
   } });
   const statements = Object.values(configured.findResources('AWS::IAM::Policy')).flatMap(p => p.Properties.PolicyDocument.Statement);
   assert.deepEqual(statements.filter(s => JSON.stringify(s.Action).includes('secretsmanager:')), [

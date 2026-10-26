@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A small website for testing local uploads to Better Vercel.">
+  <title>Small site. Big launch.</title>
+  <link rel="icon" href="./assets/launch.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./assets/style.css">
+  <script src="./assets/app.js" defer></script>
+</head>
+<body>
+  <header><a class="brand" href="./index.html">▲ Better Vercel</a><span>LOCAL UPLOAD DEMO</span></header>
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">MADE HERE. READY FOR THE WEB.</p>
+        <h1>Small site.<br>Big launch.</h1>
+        <p class="intro">This little website started as a folder on your computer. Upload it, open the preview, and give the button a click.</p>
+        <a class="button" href="#try-it">Try the demo <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="art"><img src="./assets/launch.svg" width="280" height="280" alt="A green rocket launching through a starry circle"><span>READY FOR TAKEOFF</span></div>
+    </section>
+    <section class="cards" aria-label="What this demo includes">
+      <article><span class="number">01</span><h2>One folder</h2><p>A complete static website. No build command or GitHub repository required.</p></article>
+      <article><span class="number">02</span><h2>Four tiny files</h2><p>HTML, CSS, JavaScript, and SVG. All supported by the local upload flow.</p></article>
+      <article><span class="number">03</span><h2>Real interaction</h2><p>Click below to check that the page's JavaScript is running in your preview.</p></article>
+    </section>
+    <section id="try-it" class="playground">
+      <div><p class="eyebrow">THE CLICK TEST</p><h2>Send a little celebration.</h2><p id="click-status" role="status" aria-live="polite">Ready when you are.</p></div>
+      <button id="celebrate" type="button" disabled>Launch some joy ✦</button>
+      <noscript><p>Enable JavaScript to try the click test.</p></noscript>
+    </section>
+    <footer><span>Built for a simple, happy demo.</span><span>Local files → live preview</span></footer>
+  </main>
+</body>
+</html>

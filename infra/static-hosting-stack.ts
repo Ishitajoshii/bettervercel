@@ -21,6 +21,11 @@ export class StaticHostingStack extends Stack {
       objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
       enforceSSL: true,
       versioned: false,
+      // The distribution domain is generated after this bucket; referencing it here creates a cycle.
+      // CORS permits only signed writes from CloudFront pages, never anonymous reads or writes.
+      cors: [{ allowedOrigins: ['https://*.cloudfront.net'], allowedMethods: [s3.HttpMethods.PUT],
+        allowedHeaders: ['content-type', 'cache-control', 'if-none-match', 'x-amz-checksum-sha256'],
+        maxAge: 600 }],
       // Empty manually before destroy. No auto-delete Lambda or hidden assets.
       removalPolicy: RemovalPolicy.DESTROY,
       lifecycleRules: [{

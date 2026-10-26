@@ -10,6 +10,34 @@
   <header><a class="brand" href="./"><span class="mark">▲</span> Better Vercel</a><span class="alpha">PRIVATE ALPHA</span></header>
   <main>
     <div class="intro"><div><p class="eyebrow">YOUR WORK, ON THE WEB</p><h1>Deployments</h1><p>Small projects. Immutable previews. Your AWS.</p></div><button id="add-project">Connect a project <span>+</span></button></div>
+    <div class="source-switch" role="group" aria-label="Deployment source">
+      <button id="source-github" type="button" aria-pressed="true">GitHub repository</button>
+      <button id="source-local" type="button" class="secondary" aria-pressed="false">Upload from computer</button>
+    </div>
+    <section id="local-panel" class="panel import-panel" hidden aria-labelledby="local-title">
+      <p class="eyebrow">FROM YOUR COMPUTER TO PREVIEW</p><h2 id="local-title">Upload a built website</h2>
+      <p>Select your site's output folder (dist, out, or a plain HTML site) or individual files. Include index.html at the root. Up to 500 files / 25 MiB. No GitHub account needed.</p>
+      <p class="hint">Build locally first. Use relative asset URLs for previews hosted under a deployment path. Source projects and ZIP archives are not built or extracted here.</p>
+      <p id="local-target" role="status">Connect a project with its deploy token below, then select your files.</p>
+      <button id="local-connect" class="secondary" type="button">Connect with a project token</button>
+      <form id="local-form">
+        <div class="import-grid">
+          <label>Choose a folder<input id="local-folder" type="file" webkitdirectory multiple></label>
+          <label>Or choose files<input id="local-files" type="file" multiple><span class="hint">Use a folder to preserve nested asset paths.</span></label>
+          <label>Routing<select id="local-routing"><option value="static">Static pages</option><option value="spa">Single-page app</option></select></label>
+        </div>
+        <div class="security-checks" aria-label="Upload security checks">
+          <div><strong>Secret file guard</strong><p id="local-scan">Waiting for files. Checks run in your browser before upload.</p></div>
+          <div><strong>SHA-256 integrity</strong><p id="local-integrity">A fingerprint is calculated for every file and verified by the server before publishing. Hashing is not encryption.</p></div>
+        </div>
+        <p class="hint">The guard checks sensitive filenames and common credential patterns; it cannot detect every secret. Review your files. Published previews are publicly accessible.</p>
+        <details id="local-review" hidden><summary id="local-summary">Review selected files</summary><ul id="local-file-list" class="file-review"></ul></details>
+        <label class="workflow-consent"><input id="local-consent" type="checkbox" required><span>I have reviewed these files and want to publish them as a public preview.</span></label>
+        <button id="local-deploy" type="submit" disabled>Upload &amp; deploy</button>
+        <button id="local-clear" type="button" class="secondary">Clear files</button>
+      </form>
+      <p id="local-notice" role="status" aria-live="polite"></p>
+    </section>
     <section id="github-panel" class="panel import-panel">
       <div class="section-title"><div><p class="eyebrow">FROM REPOSITORY TO PREVIEW</p><h2>Import a GitHub repository</h2></div><button id="github-logout" class="secondary" hidden>Disconnect GitHub</button></div>
       <div id="github-welcome"><p>Connect your account, choose a repository, and deploy. We will find the app folder and suggest build settings for you.</p><button id="github-connect">Continue with GitHub</button><p id="github-setup" class="hint" role="status"></p></div>
@@ -53,7 +81,7 @@
     <div class="workspace"><aside><h2>Projects <span id="project-count">0</span></h2><nav id="projects" aria-label="Connected projects"></nav><p class="aside-note">Private alpha.<br>GitHub sessions stay in this tab.</p></aside>
       <section class="deployments"><div class="section-title"><div><h2 id="project-name">Your next launch starts here</h2><p id="project-id">Connect a project to see its deployments.</p></div><div class="actions"><button id="refresh" class="secondary" hidden>Refresh</button><button id="disconnect" class="secondary" hidden>Disconnect</button></div></div>
         <div id="build-status" hidden aria-live="polite"></div>
-        <div id="list"><div class="empty"><span class="empty-symbol">↗</span><h3>A home for every deployment</h3><p>Import a repository above to build your first preview.</p></div></div>
+        <div id="list"><div class="empty"><span class="empty-symbol">↗</span><h3>A home for every deployment</h3><p>Import a repository or upload a built site from your computer.</p></div></div>
         <button id="more" class="secondary" hidden>Load more</button>
       </section>
     </div>

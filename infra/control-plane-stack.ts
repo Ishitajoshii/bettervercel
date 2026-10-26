@@ -64,7 +64,7 @@ export class ControlPlaneStack extends Stack {
     const api = new apigw.HttpApi(this, 'DeployApi', { createDefaultStage: false,
       corsPreflight: { allowOrigins: [`https://${props.previewDomain}`],
         allowMethods: [apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.DELETE],
-        allowHeaders: ['authorization', 'content-type'], maxAge: Duration.minutes(10) } });
+        allowHeaders: ['authorization', 'content-type', 'idempotency-key'], maxAge: Duration.minutes(10) } });
     new apigw.HttpStage(this, 'ApiStage', { httpApi: api, stageName: '$default', autoDeploy: true,
       throttle: { rateLimit: 5, burstLimit: 10 } });
     const integration = new integrations.HttpLambdaIntegration('ControlIntegration', control);

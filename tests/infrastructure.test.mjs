@@ -27,6 +27,13 @@ test('private bucket uses AES256, public access blocks, short artifact retention
   });
 });
 
+test('browser artifact CORS permits only signed PUT request headers from HTTPS CloudFront pages', () => {
+  template.hasResourceProperties('AWS::S3::Bucket', {
+    CorsConfiguration: { CorsRules: [{ AllowedOrigins: ['https://*.cloudfront.net'], AllowedMethods: ['PUT'],
+      AllowedHeaders: ['content-type', 'cache-control', 'if-none-match', 'x-amz-checksum-sha256'], MaxAge: 600 }] },
+  });
+});
+
 test('CloudFront uses signed S3 OAC, scoped read permission, HTTPS, and no HTML error fallback', () => {
   template.resourceCountIs('AWS::CloudFront::Distribution', 1);
   template.hasResourceProperties('AWS::CloudFront::OriginAccessControl', {
